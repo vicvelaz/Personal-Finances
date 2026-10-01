@@ -1,0 +1,3 @@
+ALTER TABLE "scheduled_transactions" ADD COLUMN "auto_post" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "scheduled_transactions" ADD CONSTRAINT "scheduled_auto_post_fixed" CHECK (not ("scheduled_transactions"."auto_post" and "scheduled_transactions"."is_estimated"));--> statement-breakpoint
+ALTER TABLE "scheduled_transactions" ADD CONSTRAINT "scheduled_reminder_range" CHECK ("scheduled_transactions"."reminder_days_before" between 0 and 30);

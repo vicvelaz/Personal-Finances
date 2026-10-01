@@ -1,0 +1,1 @@
+ALTER TABLE "categories" DROP CONSTRAINT "categories_user_name_parent_uq";

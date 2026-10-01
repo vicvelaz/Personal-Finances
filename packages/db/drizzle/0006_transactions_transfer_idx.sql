@@ -1,0 +1,1 @@
+CREATE INDEX "transactions_transfer_group_idx" ON "transactions" USING btree ("transfer_group_id");

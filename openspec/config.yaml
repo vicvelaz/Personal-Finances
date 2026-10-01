@@ -1,0 +1,48 @@
+schema: spec-driven
+
+context: |
+  Language: es
+  All artifacts must be written in es.
+  Keep OpenSpec structural headings and SHALL/MUST keywords in English.
+
+  Producto: "fin", gestor de finanzas personales para usuarios registrados (web + móvil).
+  Prioridad: tecnologías gratuitas / free tier.
+
+  Stack:
+  - Monorepo pnpm workspaces + Turborepo. Node >= 20.19.
+  - apps/web: Next.js 16 (App Router), React 19, Tailwind v4, TanStack Query, Recharts. Deploy: Vercel Hobby.
+  - apps/mobile: Expo SDK 57 (expo-router), React Native 0.86, TanStack Query, expo-secure-store, expo-notifications. Build: EAS free.
+  - packages/db: Drizzle ORM + drizzle-kit sobre Postgres (Supabase). Solo schema "public".
+  - packages/shared: lógica de dominio y validación compartida (zod v4), tests con vitest.
+  - Backend: Supabase (Auth, Postgres con RLS, Storage). Sin servidor propio salvo route handlers de Next.
+
+  Convenciones:
+  - Importes monetarios como enteros en unidades menores (céntimos); ver packages/shared/src/money.ts.
+  - Toda tabla de usuario lleva user_id -> profiles.id y política RLS "owner only".
+  - Service role key solo en servidor; nunca en bundles cliente (NEXT_PUBLIC_*/EXPO_PUBLIC_* son públicas).
+  - Validar entrada con esquemas zod de @fin/shared en web y móvil.
+  - Entidades existentes: profiles, accounts, categories, transactions, budgets, scheduled (recurrentes), savings_goals.
+githubCopilot:
+  cloudAgent: false
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always include a "Non-goals" section
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
+
+# Per-operation guidance (optional)
+# Add advisory guidance for how apply and archive work should be conducted.
+# This is separate from artifact rules above.
+# Example:
+#   operations:
+#     apply:
+#       guidance:
+#         - Keep test summaries concise
+#     archive:
+#       guidance:
+#         - Summarize the archive outcome before finishing

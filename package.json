@@ -1,0 +1,31 @@
+{
+  "name": "fin",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.15.0",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "db:generate": "pnpm --filter @fin/db generate",
+    "db:migrate": "pnpm --filter @fin/db migrate",
+    "db:verify-rls": "docker exec -i supabase_db_fin psql -U postgres -v ON_ERROR_STOP=1 < packages/db/scripts/verify-rls.sql",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop",
+    "supabase:status": "supabase status",
+    "web": "pnpm --filter @fin/web dev",
+    "mobile": "pnpm --filter @fin/mobile start"
+  },
+  "devDependencies": {
+    "@fission-ai/openspec": "1.13.2",
+    "prettier": "^3.6.2",
+    "supabase": "2.118.0",
+    "turbo": "^2.5.8",
+    "typescript": "^5.9.3"
+  }
+}

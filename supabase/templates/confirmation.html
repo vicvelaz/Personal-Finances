@@ -1,0 +1,5 @@
+<h2>Confirma tu cuenta</h2>
+<p>Pulsa el enlace para confirmar tu email y empezar a usar fin:</p>
+<p><a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&next=/">Confirmar email</a></p>
+<p>Si usas la app móvil, introduce este código: <strong>{{ .Token }}</strong></p>
+<p>Si no has creado una cuenta, ignora este mensaje.</p>
