@@ -51,6 +51,8 @@ Para un dispositivo físico, el móvil y el ordenador deben estar en la misma re
 
 - [Arquitectura y decisiones técnicas](docs/architecture.md)
 - [Flujo de trabajo para desarrollar](docs/development.md)
+- [Inicializar toda la aplicación en local en Windows](docs/inicializar-local-windows.md)
+- [Desplegar web y móvil en producción desde Windows](docs/desplegar-produccion-windows.md)
 - [Aplicación web](apps/web/README.md) · [rutas y flujos web](apps/web/src/app/README.md) · [servicios web](apps/web/src/lib/README.md)
 - [Aplicación móvil](apps/mobile/README.md) · [rutas móviles](apps/mobile/src/app/README.md) · [servicios móviles](apps/mobile/src/lib/README.md)
 - [Base de datos](packages/db/README.md) · [esquema](packages/db/src/schema/README.md)
