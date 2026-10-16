@@ -9,7 +9,7 @@
 - `drizzle.config.ts`: loads the root `.env`, points Drizzle Kit at the schema, and filters output to the Supabase-owned `public` schema.
 - `scripts/verify-rls.sql`: focused local checks for profile creation, ownership and security rules.
 
-The finance-workflows schema extension is additive: existing `budgets` rows receive `period = 'once'` by default, preserving their original single-month behavior. New monthly-plan rows store annual-plan overrides; budget closure and settlement rows record resumable, idempotent virtual allocations. Transactions also support the internal `adjustment` kind for account reconciliation. New owner-scoped tables include row-level security and owner/MFA policies.
+The finance-workflows schema extension is additive: existing `budgets` rows receive `period = 'once'` by default, preserving their original single-month behavior. New monthly-plan rows store annual-plan overrides; budget closure and settlement rows record resumable, idempotent virtual allocations. `budget_closure_rules` stores owner-scoped automatic destinations for monthly budgets. The `run_due_budget_closure_rules` function is restricted to `service_role`; the scheduled web route calls it only after validating `CRON_SECRET`. Transactions also support the internal `adjustment` kind for account reconciliation. New owner-scoped tables include row-level security and owner/MFA policies.
 
 Read the [schema module guide](src/schema/README.md) for table ownership and RLS conventions.
 

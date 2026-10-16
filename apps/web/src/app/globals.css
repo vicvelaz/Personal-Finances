@@ -24,3 +24,84 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+select[class] {
+  color: #171717;
+  background-color: #ffffff;
+  border-color: #737373;
+  color-scheme: light;
+}
+
+select[class] option {
+  color: #171717;
+  background-color: #ffffff;
+}
+
+select[class] option:checked {
+  color: #ffffff;
+  background-color: #1d4ed8;
+  font-weight: 700;
+}
+
+select[class]:hover:not(:disabled) {
+  outline: 1px dashed currentColor;
+  outline-offset: 1px;
+}
+
+select[class]:focus-visible {
+  outline: 2px solid #1d4ed8;
+  outline-offset: 2px;
+}
+
+select[class][aria-invalid="true"],
+select[class]:invalid {
+  border-color: #b91c1c;
+}
+
+select[class][aria-invalid="true"]:focus-visible,
+select[class]:invalid:focus-visible {
+  outline-color: #b91c1c;
+}
+
+input[aria-invalid="true"],
+textarea[aria-invalid="true"] {
+  border-color: #b91c1c;
+}
+
+@media (prefers-color-scheme: dark) {
+  select[class] {
+    color: #f5f5f5;
+    background-color: #171717;
+    border-color: #a3a3a3;
+    color-scheme: dark;
+  }
+
+  select[class] option {
+    color: #f5f5f5;
+    background-color: #171717;
+  }
+
+  select[class] option:checked {
+    color: #171717;
+    background-color: #60a5fa;
+  }
+
+  select[class]:focus-visible {
+    outline-color: #60a5fa;
+  }
+
+  select[class][aria-invalid="true"],
+  select[class]:invalid {
+    border-color: #f87171;
+  }
+
+  select[class][aria-invalid="true"]:focus-visible,
+  select[class]:invalid:focus-visible {
+    outline-color: #f87171;
+  }
+
+  input[aria-invalid="true"],
+  textarea[aria-invalid="true"] {
+    border-color: #f87171;
+  }
+}

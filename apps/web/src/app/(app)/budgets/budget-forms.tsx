@@ -2,7 +2,7 @@
 
 import { type BudgetLevel, type CategoryRow } from "@fin/shared";
 import { useActionState } from "react";
-import { FormAlert, SubmitButton } from "@/components/form";
+import { FormAlert, MoneyField, SubmitButton } from "@/components/form";
 import { useTranslations } from "@/components/i18n-provider";
 import { type BudgetFormState, createBudget, deleteBudget, planBudgetMonth, updateBudget } from "./actions";
 import { T } from "@/components/i18n-provider";
@@ -11,7 +11,15 @@ const inputClass =
   "rounded-md border border-neutral-300 bg-transparent px-2 py-1 text-sm dark:border-neutral-700";
 const barColor: Record<BudgetLevel, string> = { ok: "bg-green-600", warning: "bg-amber-500", over: "bg-red-600" };
 
-export function NewBudgetForm({ month, categories }: { month: string; categories: CategoryRow[] }) {
+export function NewBudgetForm({
+  month,
+  categories,
+  currency,
+}: {
+  month: string;
+  categories: CategoryRow[];
+  currency: string;
+}) {
   const [state, action] = useActionState<BudgetFormState, FormData>(createBudget, {});
   const { t, tKey } = useTranslations();
   return (
@@ -45,7 +53,7 @@ export function NewBudgetForm({ month, categories }: { month: string; categories
       </label>
       <label className="flex flex-col text-xs">
         <T id="csvImport.amount" />
-        <input name="amount" className={inputClass} placeholder={t("0,00")} />
+        <MoneyField id="new-budget-amount" name="amount" label={t("csvImport.amount")} currency={currency} className={inputClass} />
         {state.errors?.amount && <span className="text-red-600">{t(state.errors.amount)}</span>}
       </label>
       <SubmitButton><T id="budgets.addBudget" /></SubmitButton>
@@ -60,6 +68,7 @@ export function BudgetRow({
   color,
   isChild,
   amountInput,
+  currency,
   amountLabel,
   spentLabel,
   remainingLabel,
@@ -74,6 +83,7 @@ export function BudgetRow({
   color: string | null;
   isChild: boolean;
   amountInput: string;
+  currency: string;
   amountLabel: string;
   spentLabel: string;
   remainingLabel: string;
@@ -106,7 +116,14 @@ export function BudgetRow({
           {level === "over" ? <><T id="common.exceeded" /> <T>·</T> </> : level === "warning" ? <><T id="budgets.risk" /> <T>·</T> </> : null}<T id="budgets.remaining" /> {remainingLabel}
         </span>
         <form action={action} className="flex items-center gap-2" noValidate>
-          <input name="amount" defaultValue={amountInput} aria-label={t("Importe de {name}", { name })} className={`${inputClass} w-24`} />
+          <MoneyField
+            id={`budget-amount-${id}`}
+            name="amount"
+            defaultValue={amountInput}
+            label={t("Importe de {name}", { name })}
+            currency={currency}
+            className={`${inputClass} w-24`}
+          />
           <button type="submit" className="underline"><T id="common.save" /></button>
           <button type="button" className="text-red-700 underline" onClick={() => deleteBudget(id)}><T id="common.delete" /></button>
           {state.errors?.amount && <span className="text-red-600">{t(state.errors.amount)}</span>}
@@ -127,7 +144,13 @@ export function BudgetRow({
           </label>
           <label className="flex flex-col">
             {tKey("csvImport.amount")}
-            <input name="amount" className={`${inputClass} w-24`} aria-label={t("Límite del mes a planificar")} />
+            <MoneyField
+              id={`budget-plan-amount-${id}`}
+              name="amount"
+              label={t("Límite del mes a planificar")}
+              currency={currency}
+              className={`${inputClass} w-24`}
+            />
           </label>
           <button type="submit" className="underline">{t("Planificar mes")}</button>
           <FormAlert error={planState.error} message={planState.ok ? t("Plan guardado") : undefined} />

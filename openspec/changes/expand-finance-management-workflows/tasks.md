@@ -26,7 +26,7 @@
 
 - [x] 5.1 Actualizar alta, edición y progreso de presupuestos en web y móvil para periodo único, mensual o anual, fechas de vigencia y exclusión de modalidades solapadas; probar unicidad, conversión de moneda y preservación del comportamiento de periodo único.
 - [x] 5.2 Añadir equivalencias y proyecciones anual/mensual, distribución de límites para un mes futuro dentro del total anual, gasto real acumulado y reducción media necesaria para el resto del año; probar prorrata, redondeo en unidades menores y rechazo de planes que excedan el límite.
-- [ ] 5.3 Ampliar el detalle de categoría con estado del presupuesto, gráfico de doce meses y distribución de sobrantes sin quitar edición/borrado; actualizar `docs/architecture.md` y verificar datos vacíos, presupuestos superados y equivalencia de cifras entre web y móvil.
+- [x] 5.3 Ampliar el detalle de categoría con estado del presupuesto, gráfico de doce meses y distribución de sobrantes sin quitar edición/borrado; actualizar `docs/architecture.md` y verificar datos vacíos, presupuestos superados y equivalencia de cifras entre web y móvil.
 
 ## 6. Cierre mensual y metas
 
@@ -36,9 +36,9 @@
 
 ## 7. Controles accesibles y móviles
 
-- [ ] 7.1 Corregir estilos de selectores web en tema claro/oscuro y estados de foco/selección/error; verificar contraste de texto normal de al menos 4.5:1 y navegación por teclado.
-- [ ] 7.2 Incorporar controles de importe y fecha en los formularios compatibles de ambas apps sin cambiar los campos que admiten importes negativos; probar formato local, valor entero menor, máscara `DD/MM/YYYY`, calendario, teclado y fecha ISO.
-- [ ] 7.3 Reemplazar selectores móviles tipo etiquetas por control compacto con búsqueda y hoja inferior en vistas menores de 768 px; comprobar lector accesible, filtrado, cierre tras seleccionar y altura táctil mínima de 44 px, conservando el desplegable de escritorio desde 768 px.
+- [x] 7.1 Corregir estilos de selectores web en tema claro/oscuro y estados de foco/selección/error; verificar contraste de texto normal de al menos 4.5:1 y navegación por teclado.
+- [x] 7.2 Incorporar controles de importe y fecha en los formularios compatibles de ambas apps sin cambiar los campos que admiten importes negativos; probar formato local, valor entero menor, máscara `DD/MM/YYYY`, calendario, teclado y fecha ISO.
+- [x] 7.3 Reemplazar selectores móviles tipo etiquetas por control compacto con búsqueda y hoja inferior en vistas menores de 768 px; comprobar lector accesible, filtrado, cierre tras seleccionar y altura táctil mínima de 44 px, conservando el desplegable de escritorio desde 768 px.
 
 ## 8. Integración
 

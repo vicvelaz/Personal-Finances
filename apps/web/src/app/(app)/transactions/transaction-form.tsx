@@ -8,7 +8,8 @@ import {
 } from "@fin/shared";
 import Link from "next/link";
 import { useActionState, useState } from "react";
-import { Field, FormAlert, SubmitButton } from "@/components/form";
+import { Field, FormAlert, MoneyField, SubmitButton } from "@/components/form";
+import { DateInput } from "@/components/date-input";
 import type { AccountOption } from "@/lib/transactions";
 import type { TransactionFormState } from "./actions";
 import { T } from "@/components/i18n-provider";
@@ -102,11 +103,29 @@ export function TransactionForm({
           </select>
         </Field>
       )}
-      <Field label="Importe" name="amount" defaultValue={initial.amount} error={state.errors?.amount} />
+      <Field label="Importe" name="amount" error={state.errors?.amount}>
+        <MoneyField
+          id="field-amount"
+          name="amount"
+          label="Importe"
+          defaultValue={initial.amount}
+          currency={currencyOf(fromId)}
+        />
+      </Field>
       {crossCurrency && (
-        <Field label={`Importe recibido (${toCurrency})`} name="toAmount" defaultValue={initial.toAmount} error={state.errors?.toAmount} />
+        <Field label={`Importe recibido (${toCurrency})`} name="toAmount" error={state.errors?.toAmount}>
+          <MoneyField
+            id="field-toAmount"
+            name="toAmount"
+            label={`Importe recibido (${toCurrency})`}
+            defaultValue={initial.toAmount}
+            currency={toCurrency}
+          />
+        </Field>
       )}
-      <Field label="Fecha" name="occurredOn" type="date" defaultValue={initial.occurredOn} error={state.errors?.occurredOn} />
+      <Field label="Fecha" name="occurredOn" error={state.errors?.occurredOn}>
+        <DateInput id="field-occurredOn" name="occurredOn" defaultValue={initial.occurredOn} />
+      </Field>
       <Field label="Descripción" name="description" defaultValue={initial.description} error={state.errors?.description} />
       <Field labelKey="fields.notes" name="notes" error={state.errors?.notes}>
         <textarea id="field-notes" name="notes" defaultValue={initial.notes} rows={3} className={inputClass} />

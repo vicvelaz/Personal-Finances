@@ -75,7 +75,7 @@ export default async function GoalPage({ params }: PageProps<"/goals/[id]">) {
           {p.monthlyNeeded !== null && p.remaining > 0 && ` · ${translate(locale, "goals.monthlySavings", { amount: money(p.monthlyNeeded) })}`}
         </p>
       </div>
-      <AdjustGoal id={id} accounts={movable} />
+      <AdjustGoal id={id} currency={g.currency} accounts={movable} />
       <p className="text-xs text-neutral-500">
           <T>{g.account_id
           ? "Elige una cuenta para mover el dinero a la cuenta de la meta (o desde ella al retirar)."

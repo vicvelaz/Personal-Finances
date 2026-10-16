@@ -1,7 +1,8 @@
 import { buildCategoryTree, type CategoryRow, RECURRENCE_LABELS, RECURRENCES } from '@fin/shared';
 import { Switch, View } from 'react-native';
 
-import { OptionPicker, TextField } from '@/components/form';
+import { MoneyField, OptionPicker, TextField } from '@/components/form';
+import { DateField } from '@/components/date-field';
 import { ThemedText } from '@/components/themed-text';
 import type { AccountRow } from '@/lib/accounts';
 import { useLocale } from '@/lib/i18n';
@@ -76,7 +77,7 @@ export function ScheduledFields({
         onChange={(v) => onChange('categoryId', v)}
         error={errors.categoryId}
       />
-      <TextField label="Importe" value={values.amount} onChangeText={(v) => onChange('amount', v)} keyboardType="numbers-and-punctuation" placeholder="0,00" error={errors.amount} />
+      <MoneyField label="Importe" value={values.amount} onChangeText={(v) => onChange('amount', v)} currency={selectable.find((a) => a.id === values.accountId)?.currency} placeholder="0,00" error={errors.amount} />
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
         <Switch value={values.isEstimated} onValueChange={(v) => onChange('isEstimated', v)} accessibilityLabel={translate(locale, "csvImport.estimatedAmount")} />
         <ThemedText translationKey="csvImport.estimatedAmountConfirmPosting" />
@@ -96,8 +97,8 @@ export function ScheduledFields({
         onChange={(v) => onChange('recurrence', v)}
         error={errors.recurrence}
       />
-      <TextField label="Fecha de inicio (AAAA-MM-DD)" value={values.startsOn} onChangeText={(v) => onChange('startsOn', v)} autoCapitalize="none" error={errors.startsOn} />
-      <TextField label="Fecha de fin (opcional)" value={values.endsOn} onChangeText={(v) => onChange('endsOn', v)} autoCapitalize="none" placeholder="AAAA-MM-DD" error={errors.endsOn} />
+      <DateField label="Fecha de inicio (DD/MM/YYYY)" value={values.startsOn} onChange={(v) => onChange('startsOn', v)} error={errors.startsOn} />
+      <DateField label="Fecha de fin (opcional)" value={values.endsOn} onChange={(v) => onChange('endsOn', v)} error={errors.endsOn} />
     </>
   );
 }

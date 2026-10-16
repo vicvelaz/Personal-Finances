@@ -40,6 +40,10 @@ The Drizzle config loads the root `.env` and filters to `public`. Do not model S
 - Do not commit local environment files or copy service-role/database/cron secrets into either client.
 - For phones/tablets, use the development machine's LAN IP for local Supabase; loopback addresses resolve on the device itself.
 
+## Monthly budget closure scheduler
+
+Configure a scheduler to send `POST https://<web-host>/api/cron/budget-closures` on the first day of each month with `Authorization: Bearer <CRON_SECRET>`. Set `CRON_SECRET` and `SUPABASE_SERVICE_ROLE_KEY` only in the web server environment. The route processes the previous calendar month through the `run_due_budget_closure_rules` database function; retries are idempotent. A non-month-start request returns `409`, missing server configuration returns `503`, and authorization or database errors are reported as non-success responses. Budgets without automatic rules remain available for manual completion in the budget screen.
+
 ## Troubleshooting
 
 - **Supabase will not start:** confirm Docker Desktop is running, then run `pnpm supabase:status`.

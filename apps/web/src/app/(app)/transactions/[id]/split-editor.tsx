@@ -2,7 +2,7 @@
 
 import { buildCategoryTree, type CategoryRow, formatMoney, splitRemaining } from "@fin/shared";
 import { startTransition, useActionState, useState } from "react";
-import { FormAlert } from "@/components/form";
+import { FormAlert, MoneyField } from "@/components/form";
 import { useTranslations } from "@/components/i18n-provider";
 import { removeSplits, saveSplits, type SplitState } from "../actions";
 import { T } from "@/components/i18n-provider";
@@ -63,7 +63,15 @@ export function SplitEditor({
                 )),
               ])}
             </select>
-            <input aria-label={t("Importe de la parte {index}", { index: i + 1 })} value={l.amount} onChange={(e) => set(i, { amount: e.target.value })} className={`${inputClass} w-28`} inputMode="decimal" />
+            <MoneyField
+              id={`split-amount-${i}`}
+              label={t("Importe de la parte {index}", { index: i + 1 })}
+              value={l.amount}
+              onChange={(value) => set(i, { amount: value })}
+              currency={currency}
+              error={state.errors?.[`${i}.amount`]}
+              className={`${inputClass} w-28`}
+            />
             {lines.length > 2 && (
               <button type="button" className="text-sm underline" onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))}>
                 <T id="common.remove" />

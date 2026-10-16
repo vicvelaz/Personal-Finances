@@ -1,5 +1,6 @@
 import {
   bigint,
+  boolean,
   check,
   date,
   index,
@@ -159,3 +160,45 @@ export const budgetSettlements = pgTable(
 
 export type BudgetSettlement = typeof budgetSettlements.$inferSelect;
 export type NewBudgetSettlement = typeof budgetSettlements.$inferInsert;
+
+/** A user's automatic destination for each monthly budget's positive remainder. */
+export const budgetClosureRules = pgTable(
+  "budget_closure_rules",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    budgetId: uuid("budget_id")
+      .notNull()
+      .references(() => budgets.id, { onDelete: "cascade" }),
+    destination: budgetSettlementDestinationEnum("destination").notNull(),
+    targetBudgetId: uuid("target_budget_id").references(() => budgets.id, { onDelete: "cascade" }),
+    savingsGoalId: uuid("savings_goal_id").references(() => savingsGoals.id, { onDelete: "cascade" }),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    check(
+      "budget_closure_rules_target_check",
+      sql`(
+        (${t.destination} = 'reallocation' and ${t.targetBudgetId} is not null and ${t.savingsGoalId} is null)
+        or (${t.destination} = 'goal' and ${t.targetBudgetId} is null and ${t.savingsGoalId} is not null)
+        or (${t.destination} = 'rollover' and ${t.targetBudgetId} = ${t.budgetId} and ${t.savingsGoalId} is null)
+        or (${t.destination} = 'expire' and ${t.targetBudgetId} is null and ${t.savingsGoalId} is null)
+      )`,
+    ),
+    unique("budget_closure_rules_user_budget_uq").on(t.userId, t.budgetId),
+    index("budget_closure_rules_active_idx").on(t.isActive, t.budgetId),
+    ownerOnlyPolicy("budget_closure_rules", t.userId),
+    mfaPolicy("budget_closure_rules"),
+  ],
+).enableRLS();
+
+export type BudgetClosureRule = typeof budgetClosureRules.$inferSelect;
+export type NewBudgetClosureRule = typeof budgetClosureRules.$inferInsert;

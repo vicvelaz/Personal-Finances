@@ -38,6 +38,16 @@ SELECT set_config('test.b_acc',
   (SELECT id::text FROM public.accounts WHERE user_id = '00000000-0000-0000-0000-00000000000b' LIMIT 1), true);
 SELECT set_config('test.b_goal',
   (SELECT id::text FROM public.savings_goals WHERE user_id = '00000000-0000-0000-0000-00000000000b' LIMIT 1), true);
+INSERT INTO public.budgets (user_id, category_id, period_start, period, amount)
+VALUES (
+  '00000000-0000-0000-0000-00000000000b',
+  current_setting('test.b_cat')::uuid,
+  (date_trunc('year', current_date) - interval '1 year')::date,
+  'monthly',
+  10000
+);
+SELECT set_config('test.b_budget',
+  (SELECT id::text FROM public.budgets WHERE user_id = '00000000-0000-0000-0000-00000000000b' LIMIT 1), true);
 
 -- Act as user A.
 SET LOCAL ROLE authenticated;
@@ -284,6 +294,9 @@ DECLARE
   food uuid;
   bid uuid;
   book_balance bigint;
+  history_category uuid;
+  history_months int;
+  history_spent bigint;
 BEGIN
   SELECT id INTO main_acc FROM public.accounts WHERE name = 'Con movimientos';
   SELECT id INTO usd FROM public.accounts WHERE name = 'USD A';
@@ -307,6 +320,31 @@ BEGIN
   PERFORM public.reconcile_account(main_acc, book_balance + 2500, '2026-09-12');
   ASSERT (SELECT spent FROM public.budget_progress('2026-09-20') WHERE budget_id = bid) = 18000,
     'spent excludes adjustment signs, other currencies and months';
+
+  INSERT INTO public.categories (user_id, kind, name)
+  VALUES (uid, 'expense', 'Histórico de presupuesto')
+  RETURNING id INTO history_category;
+  INSERT INTO public.budgets (user_id, category_id, period_start, period, amount)
+  VALUES (uid, history_category, (date_trunc('month', current_date) - interval '11 months')::date, 'monthly', 10000);
+  INSERT INTO public.transactions (user_id, account_id, category_id, kind, amount, occurred_on)
+  VALUES (
+    uid,
+    main_acc,
+    history_category,
+    'expense',
+    -2500,
+    (date_trunc('month', current_date) - interval '1 month' + interval '5 days')::date
+  );
+  SELECT count(*), sum(spent) FILTER (
+    WHERE month_start = (date_trunc('month', current_date) - interval '1 month')::date
+  )
+  INTO history_months, history_spent
+  FROM public.category_budget_history(history_category, current_date);
+  ASSERT history_months = 12, 'category budget history always returns twelve months';
+  ASSERT history_spent = 2500, 'category budget history includes monthly expense';
+  ASSERT (SELECT budget_amount FROM public.category_budget_history(history_category, current_date)
+          WHERE month_start = date_trunc('month', current_date)::date) = 10000,
+    'category budget history returns active monthly limit';
 
   PERFORM pg_temp.expect_error(format(
     $q$INSERT INTO public.budgets (user_id, category_id, period_start, amount) VALUES (%L, (SELECT id FROM public.categories WHERE name = 'Nómina'), '2026-09-01', 100)$q$,
@@ -362,6 +400,11 @@ DECLARE
   target_budget uuid;
   goal uuid;
   overflow_goal uuid;
+  foreign_budget uuid := current_setting('test.b_budget')::uuid;
+  automatic_source_category uuid;
+  automatic_target_category uuid;
+  automatic_source_budget uuid;
+  automatic_target_budget uuid;
   foreign_goal uuid := current_setting('test.b_goal')::uuid;
   closure uuid;
   settlement uuid;
@@ -409,10 +452,19 @@ BEGIN
     'SELECT public.apply_budget_settlement(%L, %L, %L, 1, %L, NULL, %L, NULL)',
     source_budget, period, 'goal', 'closure-foreign-goal', foreign_goal), 'budget_invalid_goal');
   PERFORM pg_temp.expect_error(format(
+    'SELECT public.apply_budget_settlement(%L, %L, %L, 1, %L)',
+    foreign_budget, period, 'expire', 'closure-foreign-budget'), 'budget_not_found');
+  PERFORM pg_temp.expect_error(format(
     'SELECT public.apply_budget_settlement(%L, %L, %L, 1, %L, NULL, (SELECT id FROM public.savings_goals WHERE name = %L), NULL)',
     source_budget, period, 'goal', 'closure-wrong-currency', 'Meta cierre USD'), 'budget_invalid_goal');
+  UPDATE public.savings_goals SET status = 'archived' WHERE id = goal;
+  PERFORM pg_temp.expect_error(format(
+    'SELECT public.apply_budget_settlement(%L, %L, %L, 1, %L, NULL, %L, NULL)',
+    source_budget, period, 'goal', 'closure-archived-goal', goal), 'budget_invalid_goal');
+  UPDATE public.savings_goals SET status = 'active' WHERE id = goal;
   ASSERT (SELECT count(*) FROM public.budget_settlements WHERE user_id = uid
-          AND idempotency_key IN ('closure-foreign-goal', 'closure-wrong-currency')) = 0,
+          AND idempotency_key IN ('closure-foreign-goal', 'closure-archived-goal', 'closure-wrong-currency',
+                                  'closure-foreign-budget')) = 0,
     'failed goal allocations leave no settlement record';
   ASSERT (SELECT current_amount FROM public.savings_goals WHERE id = goal) = goal_before,
     'failed goal allocations leave goal unchanged';
@@ -436,6 +488,9 @@ BEGIN
   retry := public.apply_budget_settlement(source_budget, period, 'goal', 4000,
     'closure-goal', NULL, goal, NULL);
   ASSERT retry = settlement, 'same idempotency key returns the recorded settlement';
+  PERFORM pg_temp.expect_error(format(
+    'SELECT public.apply_budget_settlement(%L, %L, %L, 4001, %L, NULL, %L, NULL)',
+    source_budget, period, 'goal', 'closure-goal', goal), 'budget_idempotency_conflict');
   ASSERT (SELECT current_amount FROM public.savings_goals WHERE id = goal) = goal_before + 4000,
     'retry does not double the goal contribution';
   ASSERT public.apply_budget_settlement(source_budget, period, 'rollover', 3000,
@@ -454,9 +509,80 @@ BEGIN
   PERFORM pg_temp.expect_error(format(
     'DELETE FROM public.budget_settlements WHERE id = %L', settlement),
     'budget_operation_protected');
+  PERFORM pg_temp.expect_error(format(
+    'INSERT INTO public.budget_settlements (user_id, closure_id, destination, amount, idempotency_key) VALUES (%L, %L, %L, 1, %L)',
+    uid, closure, 'expire', 'closure-direct-insert'), 'budget_operation_protected');
   ASSERT (SELECT current_amount FROM public.savings_goals WHERE id = goal) = goal_before + 4000,
     'settlement leaves unrelated data unchanged';
+
+  INSERT INTO public.categories (user_id, kind, name)
+  VALUES (uid, 'expense', 'Cierre automático origen')
+  RETURNING id INTO automatic_source_category;
+  INSERT INTO public.categories (user_id, kind, name)
+  VALUES (uid, 'expense', 'Cierre automático destino')
+  RETURNING id INTO automatic_target_category;
+  INSERT INTO public.budgets (user_id, category_id, period_start, period, amount)
+  VALUES (uid, automatic_source_category, period, 'monthly', 30000)
+  RETURNING id INTO automatic_source_budget;
+  INSERT INTO public.budgets (user_id, category_id, period_start, period, amount)
+  VALUES (uid, automatic_target_category, period, 'monthly', 5000)
+  RETURNING id INTO automatic_target_budget;
+  INSERT INTO public.transactions (user_id, account_id, category_id, kind, amount, occurred_on)
+  VALUES
+    (uid, (SELECT id FROM public.accounts WHERE name = 'Con movimientos'), automatic_source_category, 'expense', -20000, period + 10),
+    (uid, (SELECT id FROM public.accounts WHERE name = 'Con movimientos'), automatic_target_category, 'expense', -7000, period + 11);
+  INSERT INTO public.budget_closure_rules (user_id, budget_id, destination, target_budget_id)
+  VALUES (uid, automatic_source_budget, 'reallocation', automatic_target_budget);
+  PERFORM public.apply_budget_settlement(automatic_source_budget, period, 'reallocation', 1000,
+    'closure-auto-prefund', automatic_target_budget, NULL, period);
 END $$;
+
+-- Automatic monthly closures require the service role and account for prior target funding.
+RESET ROLE;
+SET LOCAL ROLE service_role;
+SELECT set_config('request.jwt.claims', '{"role":"service_role"}', true);
+DO $$
+DECLARE
+  uid uuid := '00000000-0000-0000-0000-00000000000a';
+  period date := (date_trunc('year', current_date) - interval '1 year')::date;
+  source_budget uuid;
+  target_budget uuid;
+BEGIN
+  SELECT b.id INTO source_budget FROM public.budgets b
+  JOIN public.categories c ON c.id = b.category_id
+  WHERE b.user_id = uid AND c.name = 'Cierre automático origen';
+  SELECT b.id INTO target_budget FROM public.budgets b
+  JOIN public.categories c ON c.id = b.category_id
+  WHERE b.user_id = uid AND c.name = 'Cierre automático destino';
+
+  PERFORM pg_temp.expect_error(
+    format('SELECT public.run_due_budget_closure_rules(%L)', date_trunc('month', current_date)::date),
+    'budget_cron_invalid_period');
+  PERFORM pg_catalog.set_config(
+    'request.jwt.claims',
+    jsonb_build_object('sub', uid, 'role', 'authenticated', 'aal', 'aal2')::text,
+    true
+  );
+  PERFORM pg_temp.expect_error(
+    format('SELECT public.run_due_budget_closure_rules(%L)', period),
+    'budget_cron_forbidden');
+  PERFORM pg_catalog.set_config('request.jwt.claims', '{"role":"service_role"}', true);
+
+  ASSERT public.run_due_budget_closure_rules(period) = 1, 'one automatic reallocation processed';
+  ASSERT (SELECT sum(amount) FROM public.budget_settlements
+          WHERE target_budget_id = target_budget AND target_period = period) = 2000,
+    'automatic reallocation subtracts prior target funding';
+  ASSERT (SELECT status FROM public.budget_closures
+          WHERE budget_id = source_budget AND period_start = period) = 'open',
+    'automatic partial closure remains resumable';
+  ASSERT public.run_due_budget_closure_rules(period) = 0, 'automatic retry does not duplicate funding';
+  ASSERT (SELECT sum(amount) FROM public.budget_settlements
+          WHERE target_budget_id = target_budget AND target_period = period) = 2000,
+    'automatic retry leaves target funding unchanged';
+END $$;
+RESET ROLE;
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-00000000000a","role":"authenticated"}', true);
 
 -- Scheduled transactions, still as user A.
 DO $$

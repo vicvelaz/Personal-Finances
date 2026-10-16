@@ -1,6 +1,7 @@
 import { SUPPORTED_CURRENCIES, translate } from '@fin/shared';
 
-import { OptionPicker, TextField } from '@/components/form';
+import { MoneyField, OptionPicker, TextField } from '@/components/form';
+import { DateField } from '@/components/date-field';
 import type { AccountRow } from '@/lib/accounts';
 import { useLocale } from '@/lib/i18n';
 
@@ -31,7 +32,7 @@ export function GoalFields({
   return (
     <>
       <TextField label="Nombre" value={values.name} onChangeText={(v) => onChange('name', v)} error={errors.name} />
-      <TextField label="Objetivo" value={values.targetAmount} onChangeText={(v) => onChange('targetAmount', v)} keyboardType="numbers-and-punctuation" placeholder="0,00" error={errors.targetAmount} />
+      <MoneyField label="Objetivo" value={values.targetAmount} onChangeText={(v) => onChange('targetAmount', v)} currency={values.currency} placeholder="0,00" error={errors.targetAmount} />
       <OptionPicker
         label="Moneda"
         options={SUPPORTED_CURRENCIES}
@@ -42,7 +43,7 @@ export function GoalFields({
         }}
         error={errors.currency}
       />
-      <TextField label="Fecha objetivo (opcional)" value={values.targetDate} onChangeText={(v) => onChange('targetDate', v)} autoCapitalize="none" placeholder="AAAA-MM-DD" error={errors.targetDate} />
+      <DateField label="Fecha objetivo (opcional)" value={values.targetDate} onChange={(v) => onChange('targetDate', v)} error={errors.targetDate} />
       <OptionPicker label="Cuenta asociada" options={Object.keys(labels)} labels={labels} value={values.accountId} onChange={(v) => onChange('accountId', v)} error={errors.accountId} />
     </>
   );

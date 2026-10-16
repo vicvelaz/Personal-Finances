@@ -11,7 +11,7 @@ import {
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
-import { Button, FormAlert, OptionPicker, TextField } from '@/components/form';
+import { Button, FormAlert, MoneyField, OptionPicker } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
 import { supabase } from '@/lib/supabase';
 import type { TransactionRow } from '@/lib/transactions';
@@ -67,12 +67,12 @@ export function SplitEditor({ tx, categories, locale }: { tx: TransactionRow; ca
           value={l.categoryId}
           onChange={(v) => set(i, { categoryId: v })}
         />,
-        <TextField
+        <MoneyField
           key={`a${i}`}
           label={`Parte ${i + 1}: importe`}
           value={l.amount}
           onChangeText={(v) => set(i, { amount: v })}
-          keyboardType="numbers-and-punctuation"
+          currency={tx.currency}
           error={errors[`${i}.amount`]}
         />,
       ])}

@@ -3,7 +3,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { Button, FormAlert, OptionPicker, TextField } from '@/components/form';
+import { Button, FormAlert, MoneyField, OptionPicker } from '@/components/form';
 import { type GoalFormValues, GoalFields } from '@/components/goal-fields';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
@@ -94,7 +94,7 @@ function GoalDetail({ goal, locale, today }: { goal: GoalRow; locale: string; to
         Faltan {money(p.remaining)}
         {p.monthlyNeeded !== null && p.remaining > 0 ? ` · Ahorra ${money(p.monthlyNeeded)} al mes` : ''}
       </ThemedText>
-      <TextField label="Importe a aportar o retirar" value={amount} onChangeText={setAmount} keyboardType="numbers-and-punctuation" placeholder="0,00" error={adjustError} />
+      <MoneyField label="Importe a aportar o retirar" value={amount} onChangeText={setAmount} currency={goal.currency} placeholder="0,00" error={adjustError} />
       {goal.account_id && (
         <OptionPicker label="Mover dinero con" options={Object.keys(moveLabels)} labels={moveLabels} value={moveWith} onChange={setMoveWith} />
       )}

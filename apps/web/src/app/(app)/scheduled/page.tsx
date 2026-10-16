@@ -83,7 +83,7 @@ export default async function ScheduledPage() {
         <div>
           <h2 className="mb-2 text-lg font-medium"><T id="scheduled.overdue" /></h2>
           <ul className="divide-y divide-neutral-200 dark:divide-neutral-800" aria-label={translate(locale, "scheduled.overdue")}>
-            {due.map((r) => item(r, <PostScheduled id={r.id} isEstimated={r.is_estimated} amountInput={minorToInput(Math.abs(r.amount), locale)} />))}
+            {due.map((r) => item(r, <PostScheduled id={r.id} isEstimated={r.is_estimated} amountInput={minorToInput(Math.abs(r.amount), locale)} currency={r.currency} />))}
           </ul>
         </div>
       )}

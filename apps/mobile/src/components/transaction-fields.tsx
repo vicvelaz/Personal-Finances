@@ -6,7 +6,8 @@ import {
   type TransactionInput,
 } from '@fin/shared';
 
-import { OptionPicker, TextField } from '@/components/form';
+import { MoneyField, OptionPicker, TextField } from '@/components/form';
+import { DateField } from '@/components/date-field';
 import type { AccountRow } from '@/lib/accounts';
 import { useLocale } from '@/lib/i18n';
 
@@ -99,29 +100,28 @@ export function TransactionFields({
           error={errors.categoryId}
         />
       )}
-      <TextField
+      <MoneyField
         label="Importe"
         value={values.amount}
         onChangeText={(v) => onChange('amount', v)}
-        keyboardType="numbers-and-punctuation"
+        currency={currencyOf(values.accountId)}
         placeholder="0,00"
         error={errors.amount}
       />
       {crossCurrency && (
-        <TextField
+        <MoneyField
           label={`Importe recibido (${toCurrency})`}
           value={values.toAmount}
           onChangeText={(v) => onChange('toAmount', v)}
-          keyboardType="numbers-and-punctuation"
+          currency={toCurrency}
           placeholder="0,00"
           error={errors.toAmount}
         />
       )}
-      <TextField
-        label="Fecha (AAAA-MM-DD)"
+      <DateField
+        label="Fecha (DD/MM/YYYY)"
         value={values.occurredOn}
-        onChangeText={(v) => onChange('occurredOn', v)}
-        autoCapitalize="none"
+        onChange={(v) => onChange('occurredOn', v)}
         error={errors.occurredOn}
       />
       <TextField

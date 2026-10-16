@@ -13,7 +13,7 @@ import { Link, router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { Button, FormAlert, TextField } from '@/components/form';
+import { Button, FormAlert, MoneyField } from '@/components/form';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -88,7 +88,7 @@ function Item({ row, locale, due }: { row: ScheduledRow; locale: string; due?: b
       {due && (
         <>
           {row.is_estimated && (
-            <TextField label={`Importe real de ${row.description}`} value={amount} onChangeText={setAmount} keyboardType="numbers-and-punctuation" />
+            <MoneyField label={`Importe real de ${row.description}`} value={amount} onChangeText={setAmount} currency={row.currency} />
           )}
           {error && <FormAlert error={error} />}
           <View style={styles.actions}>

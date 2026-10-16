@@ -3,7 +3,8 @@
 import { SUPPORTED_CURRENCIES } from "@fin/shared";
 import Link from "next/link";
 import { useActionState, useState } from "react";
-import { Field, FormAlert, SubmitButton } from "@/components/form";
+import { Field, FormAlert, MoneyField, SubmitButton } from "@/components/form";
+import { DateInput } from "@/components/date-input";
 import { useTranslations } from "@/components/i18n-provider";
 import type { AccountOption } from "@/lib/transactions";
 import { adjustGoal, type GoalFormState } from "./actions";
@@ -38,7 +39,15 @@ export function GoalForm({
     <form action={formAction} className="flex flex-col gap-4" noValidate>
       <FormAlert error={state.error} />
       <Field label="Nombre" name="name" defaultValue={initial.name} error={state.errors?.name} />
-      <Field label="Objetivo" name="targetAmount" defaultValue={initial.targetAmount} error={state.errors?.targetAmount} />
+      <Field label="Objetivo" name="targetAmount" error={state.errors?.targetAmount}>
+        <MoneyField
+          id="field-targetAmount"
+          name="targetAmount"
+          label="Objetivo"
+          defaultValue={initial.targetAmount}
+          currency={currency}
+        />
+      </Field>
       <Field labelKey="profile.currency" name="currency" error={state.errors?.currency}>
         <select id="field-currency" name="currency" value={currency} onChange={(e) => setCurrency(e.target.value)} className={inputClass}>
           {SUPPORTED_CURRENCIES.map((c) => (
@@ -46,7 +55,9 @@ export function GoalForm({
           ))}
         </select>
       </Field>
-      <Field label="Fecha objetivo (opcional)" name="targetDate" type="date" defaultValue={initial.targetDate} error={state.errors?.targetDate} />
+      <Field label="Fecha objetivo (opcional)" name="targetDate" error={state.errors?.targetDate}>
+        <DateInput id="field-targetDate" name="targetDate" defaultValue={initial.targetDate} />
+      </Field>
       <Field labelKey="accounts.linkedAccountOptional" name="accountId" error={state.errors?.accountId}>
         <select id="field-accountId" name="accountId" defaultValue={initial.accountId} key={currency} className={inputClass}>
           <option value=""><T id="common.none" /></option>
@@ -63,7 +74,15 @@ export function GoalForm({
   );
 }
 
-export function AdjustGoal({ id, accounts }: { id: string; accounts?: { id: string; name: string }[] }) {
+export function AdjustGoal({
+  id,
+  currency,
+  accounts,
+}: {
+  id: string;
+  currency: string;
+  accounts?: { id: string; name: string }[];
+}) {
   const [state, action] = useActionState<GoalFormState, FormData>(adjustGoal.bind(null, id), {});
   const { t } = useTranslations();
   return (
@@ -77,7 +96,7 @@ export function AdjustGoal({ id, accounts }: { id: string; accounts?: { id: stri
       </label>
       <label className="flex flex-col text-xs">
         <T id="csvImport.amount" />
-        <input name="amount" className={inputClass} placeholder={t("0,00")} />
+        <MoneyField id="goal-adjust-amount" name="amount" label="Importe" currency={currency} />
       </label>
       {accounts && (
         <label className="flex flex-col text-xs">

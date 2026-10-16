@@ -24,7 +24,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { Button, FormAlert, OptionPicker, TextField } from '@/components/form';
+import { BudgetClosureAssistant } from '@/components/budget-closure-assistant';
+import { Button, FormAlert, MoneyField, OptionPicker, TextField } from '@/components/form';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -56,6 +57,8 @@ export default function BudgetsScreen() {
   const currency = profile?.base_currency ?? 'EUR';
   const today = todayInTimeZone(profile?.timezone ?? 'Europe/Madrid');
   const [month, setMonth] = useState(() => today.slice(0, 7));
+  const closingMonth = shiftMonth(month, -1);
+  const canClose = closingMonth < today.slice(0, 7);
   const queryClient = useQueryClient();
   const categories = useCategories();
 
@@ -75,6 +78,48 @@ export default function BudgetsScreen() {
       const { data, error } = await supabase.rpc('budget_year_spent', { p_year: `${today.slice(0, 4)}-01-01` });
       if (error) throw error;
       return new Map((data as { budget_id: string; spent: number }[]).map((r) => [r.budget_id, r.spent]));
+    },
+  });
+  const closure = useQuery({
+    queryKey: ['budget-closure', session?.user.id, closingMonth],
+    enabled: !!session && canClose,
+    queryFn: async () => {
+      const [{ data: budgets, error: budgetsError }, { data: closures, error: closuresError }, { data: goals, error: goalsError }] =
+        await Promise.all([
+          supabase.rpc('budget_progress', { p_month: monthRange(closingMonth)!.from }),
+          supabase.from('budget_closures').select('id, budget_id, status').eq('period_start', `${closingMonth}-01`),
+          supabase.from('savings_goals').select('id, name, currency').eq('status', 'active').eq('currency', currency),
+        ]);
+      if (budgetsError || closuresError || goalsError) throw new Error('No se pudo cargar la información del cierre mensual');
+      const budgetIds = ((budgets ?? []) as Progress[])
+        .filter((row) => row.period === 'monthly')
+        .map((row) => row.budget_id);
+      const closureRows = closures ?? [];
+      const closureIds = closureRows.map((row) => row.id);
+      const [{ data: settlements, error: settlementsError }, { data: rules, error: rulesError }] = await Promise.all([
+        closureIds.length
+          ? supabase.from('budget_settlements').select('closure_id, amount').in('closure_id', closureIds)
+          : Promise.resolve({ data: [], error: null }),
+        budgetIds.length
+          ? supabase.from('budget_closure_rules')
+              .select('budget_id, destination, target_budget_id, savings_goal_id')
+              .in('budget_id', budgetIds)
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+      if (settlementsError || rulesError) throw new Error('No se pudieron cargar las reglas del cierre');
+      const closureById = new Map(closureRows.map((row) => [row.id, row]));
+      const settledByBudget = new Map<string, number>();
+      for (const settlement of settlements ?? []) {
+        const budgetId = closureById.get(settlement.closure_id)?.budget_id;
+        if (budgetId) settledByBudget.set(budgetId, (settledByBudget.get(budgetId) ?? 0) + settlement.amount);
+      }
+      return {
+        budgets: ((budgets ?? []) as Progress[]).filter((row) => row.period === 'monthly'),
+        goals: goals ?? [],
+        rules: rules ?? [],
+        closed: closureRows.filter((row) => row.status === 'completed').map((row) => row.budget_id),
+        settledByBudget,
+      };
     },
   });
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['budgets'] });
@@ -107,6 +152,20 @@ export default function BudgetsScreen() {
         {translate(locale, BUDGET_MESSAGES.baseCurrencyOnly)} ({currency}).
       </ThemedText>
       {progress.isError && <FormAlert error="No se pudieron cargar los presupuestos" />}
+      {closure.isError && <FormAlert error={closure.error.message} />}
+      {closure.data && (
+        <BudgetClosureAssistant
+          month={closingMonth}
+          locale={locale}
+          currency={currency}
+          budgets={closure.data.budgets}
+          goals={closure.data.goals}
+          rules={closure.data.rules}
+          closed={closure.data.closed}
+          settledByBudget={closure.data.settledByBudget}
+          onChanged={invalidate}
+        />
+      )}
       {progress.isSuccess && rows.length === 0 && (
         <ThemedText translationKey="dashboard.budgetsMonth" />
       )}
@@ -124,6 +183,7 @@ export default function BudgetsScreen() {
       ))}
       <NewBudget
         month={month}
+        currency={currency}
         options={available.map((c) => c.id)}
         labels={Object.fromEntries(available.map((c) => [c.id, c.parent_id ? `· ${c.name}` : c.name]))}
         onCreated={invalidate}
@@ -252,7 +312,7 @@ function BudgetItem({
         {s.level === 'over' ? `${translate(locale, "common.exceeded")} · ` : s.level === 'warning' ? `${translate(locale, "budgets.risk")} · ` : ''}
         {translate(locale, "budgets.remaining")} {money(s.remaining)}
       </ThemedText>
-      <TextField label={`Importe de ${row.category_name}`} value={amount} onChangeText={setAmount} error={error} keyboardType="numbers-and-punctuation" />
+      <MoneyField label={`Importe de ${row.category_name}`} value={amount} onChangeText={setAmount} currency={currency} error={error} />
       {details.map((line) => (
         <ThemedText key={line} type="small" themeColor="textSecondary" translateText={false}>
           {line}
@@ -261,7 +321,7 @@ function BudgetItem({
       {row.period === 'monthly' && inCurrentYear && (
         <View style={styles.newBudget}>
           <TextField label="Mes a planificar (AAAA-MM)" value={planMonth} onChangeText={setPlanMonth} placeholder="2026-12" autoCapitalize="none" />
-          <TextField label="Límite del mes a planificar" value={planAmount} onChangeText={setPlanAmount} keyboardType="numbers-and-punctuation" />
+          <MoneyField label="Límite del mes a planificar" value={planAmount} onChangeText={setPlanAmount} currency={currency} />
           <FormAlert error={planError} message={planSaved ? 'Plan guardado' : undefined} />
           <Button variant="link" title="Planificar mes" onPress={() => plan.mutate()} />
         </View>
@@ -282,11 +342,13 @@ function BudgetItem({
 
 function NewBudget({
   month,
+  currency,
   options,
   labels,
   onCreated,
 }: {
   month: string;
+  currency: string;
   options: string[];
   labels: Record<string, string>;
   onCreated: () => void;
@@ -346,7 +408,7 @@ function NewBudget({
       {period !== 'once' && (
         <TextField labelKey="budgets.endMonthOptional" value={endMonth} onChangeText={setEndMonth} error={errors.endMonth} placeholder="2026-12" autoCapitalize="none" />
       )}
-      <TextField label="Importe" value={amount} onChangeText={setAmount} error={errors.amount} keyboardType="numbers-and-punctuation" placeholder="0,00" />
+      <MoneyField label="Importe" value={amount} onChangeText={setAmount} currency={currency} error={errors.amount} placeholder="0,00" />
       <Button title="Añadir presupuesto" onPress={() => create.mutate()} loading={create.isPending} />
     </View>
   );

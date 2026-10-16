@@ -3,6 +3,7 @@ import {
   formatManualDate,
   formatMonth,
   isValidIsoDate,
+  maskManualDateInput,
   monthRange,
   parseManualDate,
   shiftMonth,
@@ -31,6 +32,13 @@ describe("dates", () => {
     expect(parseManualDate("31/02/2026")).toBeNull();
     expect(parseManualDate("1/1/2027")).toBeNull();
     expect(formatManualDate("2027-02-29")).toBeNull();
+  });
+
+  it("masks typed and pasted digits as DD/MM/YYYY", () => {
+    expect(maskManualDateInput("15102026")).toBe("15/10/2026");
+    expect(maskManualDateInput("15/10/2026")).toBe("15/10/2026");
+    expect(maskManualDateInput("1510")).toBe("15/10");
+    expect(parseManualDate(maskManualDateInput("31022026"))).toBeNull();
   });
 
   it("returns inclusive month ranges", () => {

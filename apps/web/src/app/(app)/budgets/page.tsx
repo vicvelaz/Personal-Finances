@@ -22,6 +22,7 @@ import { copyPreviousMonth } from "./actions";
 import { BudgetRow, NewBudgetForm } from "./budget-forms";
 import { T } from "@/components/i18n-provider";
 import { translateServer } from "@/lib/i18n";
+import { ClosureAssistant } from "./closure-assistant";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: await translateServer("budgets.budgets") };
@@ -45,16 +46,57 @@ export default async function BudgetsPage({ searchParams }: PageProps<"/budgets"
   const today = todayInTimeZone(timezone);
   const requested = typeof sp.month === "string" ? sp.month : "";
   const month = monthRange(requested) ? requested : today.slice(0, 7);
+  const closingMonth = shiftMonth(month, -1);
+  const canClose = closingMonth < today.slice(0, 7);
 
   const supabase = await createClient();
-  const [{ data: progress, error }, { data: categories }, { data: yearSpent }] = await Promise.all([
+  const [
+    { data: progress, error },
+    { data: categories, error: categoriesError },
+    { data: yearSpent, error: yearSpentError },
+    { data: closureProgress, error: closureProgressError },
+    { data: closures, error: closuresError },
+    { data: goals, error: goalsError },
+  ] = await Promise.all([
     supabase.rpc("budget_progress", { p_month: monthRange(month)!.from }),
     supabase.from("categories").select("id, name, kind, parent_id, color").eq("kind", "expense").returns<CategoryRow[]>(),
     supabase.rpc("budget_year_spent", { p_year: `${today.slice(0, 4)}-01-01` }),
+    canClose ? supabase.rpc("budget_progress", { p_month: monthRange(closingMonth)!.from }) : Promise.resolve({ data: [], error: null }),
+    canClose
+      ? supabase.from("budget_closures").select("id, budget_id, status").eq("period_start", `${closingMonth}-01`)
+      : Promise.resolve({ data: [], error: null }),
+    canClose
+      ? supabase.from("savings_goals").select("id, name, currency").eq("status", "active").eq("currency", baseCurrency)
+      : Promise.resolve({ data: [], error: null }),
   ]);
   if (error) throw new Error("No se pudieron cargar los presupuestos");
+  if (categoriesError || yearSpentError || closureProgressError || closuresError || goalsError) {
+    throw new Error("No se pudo cargar la información del cierre mensual");
+  }
 
   const rows = (progress ?? []) as Progress[];
+  const closeRows = (closureProgress ?? []) as Progress[];
+  const closeBudgets = closeRows.filter((row) => row.period === "monthly");
+  const closureRows = (closures ?? []) as { id: string; budget_id: string; status: string }[];
+  const closureIds = closureRows.map((row) => row.id);
+  const { data: settlements, error: settlementsError } = closureIds.length
+    ? await supabase.from("budget_settlements").select("closure_id, amount").in("closure_id", closureIds)
+    : { data: [], error: null };
+  if (settlementsError) throw new Error("No se pudieron cargar las liquidaciones del cierre");
+  const closureById = new Map(closureRows.map((row) => [row.id, row]));
+  const settledByBudget = new Map<string, number>();
+  for (const settlement of settlements ?? []) {
+    const budgetId = closureById.get(settlement.closure_id)?.budget_id;
+    if (budgetId) settledByBudget.set(budgetId, (settledByBudget.get(budgetId) ?? 0) + settlement.amount);
+  }
+  const closeBudgetIds = closeBudgets.map((row) => row.budget_id);
+  const { data: rules, error: rulesError } = closeBudgetIds.length
+    ? await supabase.from("budget_closure_rules")
+        .select("budget_id, destination, target_budget_id, savings_goal_id")
+        .in("budget_id", closeBudgetIds)
+    : { data: [], error: null };
+  if (rulesError) throw new Error("No se pudieron cargar las reglas de cierre");
+  const closed = closureRows.filter((row) => row.status === "completed").map((row) => row.budget_id);
   const yearSpentById = new Map(((yearSpent ?? []) as { budget_id: string; spent: number }[]).map((r) => [r.budget_id, r.spent]));
   const inCurrentYear = month.slice(0, 4) === today.slice(0, 4);
   const periodLabels: Record<BudgetPeriod, string | undefined> = {
@@ -76,6 +118,19 @@ export default async function BudgetsPage({ searchParams }: PageProps<"/budgets"
         <Link href={`/budgets?month=${shiftMonth(month, 1)}`} aria-label={translate(locale, "dashboard.nextMonth")} className="px-2"><T>→</T></Link>
       </div>
       <p className="text-sm text-neutral-500"><T>{BUDGET_MESSAGES.baseCurrencyOnly}</T> <T>(</T>{baseCurrency}<T>).</T></p>
+
+      {canClose && closeBudgets.length > 0 && (
+        <ClosureAssistant
+          month={closingMonth}
+          locale={locale}
+          currency={baseCurrency}
+          budgets={closeBudgets}
+          goals={goals ?? []}
+          rules={rules ?? []}
+          closed={closed}
+          settledByBudget={settledByBudget}
+        />
+      )}
 
       {rows.length === 0 ? (
         <p className="text-neutral-500"><T id="dashboard.budgetsMonth" /></p>
@@ -99,6 +154,7 @@ export default async function BudgetsPage({ searchParams }: PageProps<"/budgets"
                   color={r.color}
                   isChild={r.parent_id !== null}
                   amountInput={minorToInput(r.period === "monthly" ? r.base_amount : r.amount, locale)}
+                  currency={baseCurrency}
                   amountLabel={money(r.amount)}
                   spentLabel={money(r.spent)}
                   remainingLabel={money(s.remaining)}
@@ -114,7 +170,7 @@ export default async function BudgetsPage({ searchParams }: PageProps<"/budgets"
         </>
       )}
 
-      <NewBudgetForm month={month} categories={available} />
+      <NewBudgetForm month={month} categories={available} currency={baseCurrency} />
       <form action={copyPreviousMonth.bind(null, month)}>
         <button type="submit" className="text-sm underline"><T id="dashboard.copyLastMonthSBudgets" /></button>
       </form>

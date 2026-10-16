@@ -24,6 +24,14 @@ export function parseManualDate(value: string): string | null {
   return isValidIsoDate(iso) ? iso : null;
 }
 
+/** Applies a DD/MM/YYYY mask to digit input and paste, preserving incomplete drafts. */
+export function maskManualDateInput(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+}
+
 /** Converts a valid ISO calendar date to DD/MM/YYYY, or null for invalid input. */
 export function formatManualDate(value: string): string | null {
   if (!isValidIsoDate(value)) return null;
