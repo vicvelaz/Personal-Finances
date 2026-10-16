@@ -1,10 +1,18 @@
-import { type CategoryRow, fieldErrors, minorToInput, transactionSchema } from '@fin/shared';
+import {
+  formatIsoDate,
+  formatMoney,
+  type CategoryRow,
+  fieldErrors,
+  minorToInput,
+  transactionSchema,
+} from '@fin/shared';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 
 import { Button, FormAlert } from '@/components/form';
 import { Screen } from '@/components/screen';
 import { SplitEditor } from '@/components/split-editor';
+import { ThemedText } from '@/components/themed-text';
 import { type TransactionFormValues, TransactionFields } from '@/components/transaction-fields';
 import { type AccountRow, useAccounts } from '@/lib/accounts';
 import { useCategories } from '@/lib/categories';
@@ -29,6 +37,19 @@ export default function EditTransactionScreen() {
     );
   }
   const t = tx.data;
+  if (t.kind === 'adjustment') {
+    return (
+      <Screen titleKey="transactions.balanceAdjustment">
+        <ThemedText type="small">
+          {formatIsoDate(t.occurred_on, locale)} · {t.account?.name}
+        </ThemedText>
+        <ThemedText style={t.amount < 0 ? { color: '#dc2626' } : { color: '#15803d' }}>
+          {formatMoney(t.amount, t.currency, locale)}
+        </ThemedText>
+        <Button variant="link" title="Volver" onPress={() => router.back()} />
+      </Screen>
+    );
+  }
   return (
     <EditTransactionForm
       key={t.id}

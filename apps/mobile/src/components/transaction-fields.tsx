@@ -3,7 +3,7 @@ import {
   type CategoryRow,
   TRANSACTION_KIND_LABELS,
   translate,
-  type TransactionKind,
+  type TransactionInput,
 } from '@fin/shared';
 
 import { OptionPicker, TextField } from '@/components/form';
@@ -11,7 +11,7 @@ import type { AccountRow } from '@/lib/accounts';
 import { useLocale } from '@/lib/i18n';
 
 export type TransactionFormValues = {
-  kind: TransactionKind;
+  kind: TransactionInput['kind'];
   accountId: string;
   toAccountId: string;
   categoryId: string;
@@ -37,7 +37,7 @@ export function TransactionFields({
   errors: Record<string, string>;
   accounts: AccountRow[];
   categories: CategoryRow[];
-  allowedKinds: readonly TransactionKind[];
+  allowedKinds: readonly TransactionInput['kind'][];
 }) {
   const { locale } = useLocale();
   // Archived accounts stay selectable only if the transaction already uses them.

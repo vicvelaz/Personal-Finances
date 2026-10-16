@@ -6,6 +6,90 @@ export const MAX_IMPORT_ROWS = 1000;
 
 const SEPARATORS = [";", ",", "\t"] as const;
 
+export const CANONICAL_IMPORT_FIELDS = [
+  "date",
+  "amount",
+  "type",
+  "category",
+  "account",
+  "description",
+] as const;
+export const OPTIONAL_IMPORT_FIELDS = ["destination_account"] as const;
+export type CanonicalImportField = (typeof CANONICAL_IMPORT_FIELDS)[number] | (typeof OPTIONAL_IMPORT_FIELDS)[number];
+export type CanonicalImportType = "EXPENSE" | "INCOME" | "TRANSFER";
+export const INVALID_CSV_HEADER = "INVALID_CSV_HEADER" as const;
+
+export type CanonicalImportHeader = Record<(typeof CANONICAL_IMPORT_FIELDS)[number], number> & {
+  destination_account: number | null;
+};
+
+export type CanonicalImportRow = {
+  occurredOn: string;
+  amount: number;
+  type: CanonicalImportType;
+  category: string | null;
+  account: string | null;
+  destinationAccount: string | null;
+  description: string | null;
+};
+
+export type ImportAccountOption = { id: string; name: string; currency: string; is_archived?: boolean };
+export type ImportAccountError =
+  | "source_account_not_found"
+  | "source_account_ambiguous"
+  | "invalid_default_account"
+  | "destination_account_required"
+  | "destination_account_not_found"
+  | "destination_account_ambiguous"
+  | "transfer_same_account"
+  | "transfer_currency_mismatch";
+export type ImportAccountResolution =
+  | { ok: true; source: ImportAccountOption; destination?: ImportAccountOption }
+  | { ok: false; error: ImportAccountError };
+
+export type CanonicalImportPreviewRow = { line: number; value?: CanonicalImportRow; error?: string };
+
+function normaliseAccountName(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLocaleLowerCase();
+}
+
+function matchAccount(name: string, accounts: readonly ImportAccountOption[]) {
+  const normalized = normaliseAccountName(name);
+  const matches = accounts.filter((account) => !account.is_archived && normaliseAccountName(account.name) === normalized);
+  if (matches.length === 1) return { account: matches[0]!, error: undefined };
+  return { account: undefined, error: matches.length ? "ambiguous" as const : "not_found" as const };
+}
+
+/** Resolves CSV account names to one active account and enforces same-currency CSV transfers. */
+export function resolveImportAccounts(
+  row: Pick<CanonicalImportRow, "type" | "account" | "destinationAccount">,
+  accounts: readonly ImportAccountOption[],
+  defaultAccountId: string,
+): ImportAccountResolution {
+  let source: ImportAccountOption | undefined;
+  if (row.account?.trim()) {
+    const match = matchAccount(row.account, accounts);
+    if (!match.account) return { ok: false, error: match.error === "ambiguous" ? "source_account_ambiguous" : "source_account_not_found" };
+    source = match.account;
+  } else {
+    source = accounts.find((account) => account.id === defaultAccountId && !account.is_archived);
+    if (!source) return { ok: false, error: "invalid_default_account" };
+  }
+
+  if (row.type !== "TRANSFER") return { ok: true, source };
+  if (!row.destinationAccount?.trim()) return { ok: false, error: "destination_account_required" };
+  const match = matchAccount(row.destinationAccount, accounts);
+  if (!match.account) {
+    return {
+      ok: false,
+      error: match.error === "ambiguous" ? "destination_account_ambiguous" : "destination_account_not_found",
+    };
+  }
+  if (source.id === match.account.id) return { ok: false, error: "transfer_same_account" };
+  if (source.currency !== match.account.currency) return { ok: false, error: "transfer_currency_mismatch" };
+  return { ok: true, source, destination: match.account };
+}
+
 /** Picks the separator that appears most often outside quotes in the first line. */
 function detectSeparator(text: string): string {
   const firstLine = text.split(/\r?\n/, 1)[0] ?? "";
@@ -72,6 +156,88 @@ export function parseCsv(input: string): string[][] {
   }
   if (field !== "" || row.length) endRow();
   return rows;
+}
+
+/** Validates the canonical CSV header and returns the index of each field. */
+export function validateImportHeader(headers: string[]): CanonicalImportHeader | typeof INVALID_CSV_HEADER {
+  const indexes = new Map<string, number>();
+  for (const [index, rawHeader] of headers.entries()) {
+    const name = rawHeader.trim().toLowerCase();
+    if (![...CANONICAL_IMPORT_FIELDS, ...OPTIONAL_IMPORT_FIELDS].includes(name as CanonicalImportField) || indexes.has(name)) {
+      return INVALID_CSV_HEADER;
+    }
+    indexes.set(name, index);
+  }
+
+  if (CANONICAL_IMPORT_FIELDS.some((field) => !indexes.has(field))) return INVALID_CSV_HEADER;
+
+  return {
+    date: indexes.get("date")!,
+    amount: indexes.get("amount")!,
+    type: indexes.get("type")!,
+    category: indexes.get("category")!,
+    account: indexes.get("account")!,
+    description: indexes.get("description")!,
+    destination_account: indexes.get("destination_account") ?? null,
+  };
+}
+
+function parseCanonicalAmount(value: string): number | null {
+  const match = /^([+-]?)(\d+)(?:[.,](\d{1,2}))?$/.exec(value.trim());
+  if (!match) return null;
+
+  const major = BigInt(match[2]!);
+  const minor = major * BigInt(100) + BigInt((match[3] ?? "").padEnd(2, "0") || "0");
+  const signed = match[1] === "-" ? -minor : minor;
+  const amount = Number(signed);
+  return Number.isSafeInteger(amount) ? amount : null;
+}
+
+/**
+ * Parses canonical CSV rows, normalizing expense and income signs from `type`.
+ * Returns INVALID_CSV_HEADER before processing rows when the header is not canonical.
+ */
+export function buildCanonicalImportRows(rows: string[][]):
+  | { success: false; error: typeof INVALID_CSV_HEADER }
+  | { success: true; rows: CanonicalImportPreviewRow[] } {
+  const header = rows[0];
+  const fields = header ? validateImportHeader(header) : INVALID_CSV_HEADER;
+  if (fields === INVALID_CSV_HEADER) return { success: false, error: INVALID_CSV_HEADER };
+
+  const cell = (row: string[], field: CanonicalImportField) => {
+    const index = fields[field];
+    return (index === null ? "" : (row[index] ?? "")).trim();
+  };
+  const parsedRows = rows.slice(1).map((row, index): CanonicalImportPreviewRow => {
+    const line = index + 2;
+    const occurredOn = parseImportDate(cell(row, "date"));
+    if (!occurredOn) return { line, error: "Fecha no válida" };
+
+    const rawType = cell(row, "type").toUpperCase();
+    if (rawType !== "EXPENSE" && rawType !== "INCOME" && rawType !== "TRANSFER") {
+      return { line, error: "Tipo no válido" };
+    }
+    const parsedAmount = parseCanonicalAmount(cell(row, "amount"));
+    if (parsedAmount === null || parsedAmount === 0) return { line, error: "Importe no válido" };
+    const amount = rawType === "EXPENSE" ? -Math.abs(parsedAmount) : Math.abs(parsedAmount);
+    const description = cell(row, "description");
+    if (description.length > 120) return { line, error: "Descripción demasiado larga" };
+
+    return {
+      line,
+      value: {
+        occurredOn,
+        amount,
+        type: rawType,
+        category: cell(row, "category") || null,
+        account: cell(row, "account") || null,
+        destinationAccount: cell(row, "destination_account") || null,
+        description: description || null,
+      },
+    };
+  });
+
+  return { success: true, rows: parsedRows };
 }
 
 export const IMPORT_FIELDS = ["date", "amount", "description", "category", "kind", "currency", "account"] as const;

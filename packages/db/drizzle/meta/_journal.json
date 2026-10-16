@@ -176,6 +176,20 @@
       "when": 1790805442248,
       "tag": "0024_goal_transfers",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792145343218,
+      "tag": "0025_little_sprite",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792146593290,
+      "tag": "0026_budget_operations",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,17 @@
 import { describe, expect, it } from "vitest";
+import { accountReconciliationErrorKey } from "./accounts";
+
+describe("accountReconciliationErrorKey", () => {
+  it.each([
+    ["reconciliation_invalid_account", "accounts.accountNotFound"],
+    ["transaction_account_archived", "accounts.cannotReconcileArchived"],
+    ["mfa_required", "auth.mfaRequired"],
+    ["unknown_error", "accounts.reconciliationFailed"],
+    [undefined, "accounts.reconciliationFailed"],
+  ] as const)("maps %s to %s", (message, key) => {
+    expect(accountReconciliationErrorKey(message)).toBe(key);
+  });
+});
 import { accountCreateSchema, accountUpdateSchema, totalsByCurrency } from "./accounts";
 import { fieldErrors } from "./auth";
 import { minorToInput } from "./money-input";

@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { formatMonth, isValidIsoDate, monthRange, shiftMonth, todayInTimeZone } from "./dates";
+import {
+  formatManualDate,
+  formatMonth,
+  isValidIsoDate,
+  monthRange,
+  parseManualDate,
+  shiftMonth,
+  todayInTimeZone,
+} from "./dates";
 
 describe("dates", () => {
   it("computes today in a time zone", () => {
@@ -14,6 +22,15 @@ describe("dates", () => {
     expect(isValidIsoDate("2026-02-29")).toBe(false);
     expect(isValidIsoDate("2026-13-01")).toBe(false);
     expect(isValidIsoDate("30/09/2026")).toBe(false);
+  });
+
+  it("converts manual dates across month and year boundaries without timezone shifts", () => {
+    expect(parseManualDate("31/12/2026")).toBe("2026-12-31");
+    expect(parseManualDate("01/01/2027")).toBe("2027-01-01");
+    expect(formatManualDate("2027-01-01")).toBe("01/01/2027");
+    expect(parseManualDate("31/02/2026")).toBeNull();
+    expect(parseManualDate("1/1/2027")).toBeNull();
+    expect(formatManualDate("2027-02-29")).toBeNull();
   });
 
   it("returns inclusive month ranges", () => {

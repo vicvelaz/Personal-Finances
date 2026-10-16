@@ -88,6 +88,7 @@ export async function updateTransaction(
     .eq("id", id)
     .maybeSingle();
   if (!existing) return { error: TRANSACTION_MESSAGES.notFound };
+  if (existing.kind === "adjustment") return { error: TRANSACTION_MESSAGES.adjustmentReadOnly };
   if ((existing.kind === "transfer") !== (v.kind === "transfer")) {
     return { errors: { kind: "No se puede convertir un movimiento en transferencia ni al revés" } };
   }
@@ -123,8 +124,13 @@ export async function updateTransaction(
 
 export async function deleteTransaction(id: string): Promise<{ error?: string }> {
   const { supabase } = await requireUser();
-  const { data: existing } = await supabase.from("transactions").select("transfer_group_id").eq("id", id).maybeSingle();
+  const { data: existing } = await supabase
+    .from("transactions")
+    .select("kind, transfer_group_id")
+    .eq("id", id)
+    .maybeSingle();
   if (!existing) return { error: TRANSACTION_MESSAGES.notFound };
+  if (existing.kind === "adjustment") return { error: TRANSACTION_MESSAGES.adjustmentReadOnly };
 
   const query = supabase.from("transactions").delete();
   const { error } = existing.transfer_group_id
@@ -154,8 +160,13 @@ export async function saveSplits(id: string, _: SplitState, formData: FormData):
   const lines = raw.map((l) => ({ categoryId: String(l?.categoryId ?? ""), amount: String(l?.amount ?? "") }));
 
   const { supabase } = await requireUser();
-  const { data: tx } = await supabase.from("transactions").select("amount").eq("id", id).maybeSingle<{ amount: number }>();
+  const { data: tx } = await supabase
+    .from("transactions")
+    .select("amount, kind")
+    .eq("id", id)
+    .maybeSingle<{ amount: number; kind: string }>();
   if (!tx) return { error: TRANSACTION_MESSAGES.notFound };
+  if (tx.kind === "adjustment") return { error: TRANSACTION_MESSAGES.adjustmentReadOnly };
 
   const parsed = parseSplits(lines, Math.abs(tx.amount));
   if (!parsed.ok) return { errors: parsed.errors };

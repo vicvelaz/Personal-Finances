@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
     const { data, error } = await supabase
       .from("transactions")
       .select("occurred_on, kind, description, amount, currency, account:accounts(name), category:categories(name)")
+      .neq("kind", "adjustment")
       .order("occurred_on")
       .returns<TxRow[]>();
     if (error) return NextResponse.json({ error: "export_failed" }, { status: 500 });

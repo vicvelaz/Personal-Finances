@@ -2,19 +2,19 @@
 
 ## 1. Contratos de dominio compartido
 
-- [ ] 1.1 Sustituir el mapeo CSV libre por validación de cabecera canónica, resolución de `type` y normalización exacta de importes; añadir pruebas para orden/capitalización, columnas ausentes o extra, importes y errores `INVALID_CSV_HEADER`, verificadas con `pnpm --filter @fin/shared test`.
-- [ ] 1.2 Modelar en `@fin/shared` los periodos `once`, `monthly` y `annual`, la exclusión de periodos solapados, la prorrata anual mensual y el cálculo de planes con límite anual; cubrirlo con pruebas de un mes, año bisiesto, distribución por meses futuros y presupuesto restante.
-- [ ] 1.3 Añadir validación y conversión compartidas para importe positivo estricto y fecha manual `DD/MM/YYYY` a ISO; documentar las APIs en `packages/shared/src/README.md` y probar escritura/pega inválidas, separador repetido, unidades menores, fechas inexistentes y cambios de mes/año.
+- [x] 1.1 Sustituir el mapeo CSV libre por validación de cabecera canónica, resolución de `type` y normalización exacta de importes; añadir pruebas para orden/capitalización, columnas ausentes o extra, importes y errores `INVALID_CSV_HEADER`, verificadas con `pnpm --filter @fin/shared test`.
+- [x] 1.2 Modelar en `@fin/shared` los periodos `once`, `monthly` y `annual`, la exclusión de periodos solapados, la prorrata anual mensual y el cálculo de planes con límite anual; cubrirlo con pruebas de un mes, año bisiesto, distribución por meses futuros y presupuesto restante.
+- [x] 1.3 Añadir validación y conversión compartidas para importe positivo estricto y fecha manual `DD/MM/YYYY` a ISO; documentar las APIs en `packages/shared/src/README.md` y probar escritura/pega inválidas, separador repetido, unidades menores, fechas inexistentes y cambios de mes/año.
 
 ## 2. Persistencia y operaciones atómicas
 
-- [ ] 2.1 Extender Drizzle y crear una migración aditiva para ajustes internos, modalidades y vigencias presupuestarias, planes mensuales y registros idempotentes de cierre; documentar el cambio en `packages/db/README.md`, mantener los presupuestos existentes como `once`, generar SQL y revisar que no se modifiquen migraciones ya aplicadas.
+- [x] 2.1 Extender Drizzle y crear una migración aditiva para ajustes internos, modalidades y vigencias presupuestarias, planes mensuales y registros idempotentes de cierre; documentar el cambio en `packages/db/README.md`, mantener los presupuestos existentes como `once`, generar SQL y revisar que no se modifiquen migraciones ya aplicadas.
 - [ ] 2.2 Añadir políticas/funciones de base de datos para que solo la conciliación pueda crear ajustes y para aplicar cierres, reasignaciones, rollover y sweep a metas atómicamente; probar propiedad, idempotencia, fallos sin cambios parciales y ejecutar `pnpm db:verify-rls`.
 
 ## 3. Conciliación de cuentas
 
-- [ ] 3.1 Añadir en web y móvil el flujo para consultar el saldo real y conciliarlo mediante la operación protegida; probar diferencias positivas, negativas, cero y cuenta ajena, y confirmar que la interfaz conserva las acciones actuales de cuenta.
-- [ ] 3.2 Excluir ajustes de los cálculos de gasto/ingreso, presupuestos, divisiones y exportaciones ordinarias, etiquetarlos en el historial y actualizar `docs/architecture.md`; verificar saldo, informes y listado con un ajuste de cada signo.
+- [x] 3.1 Añadir en web y móvil el flujo para consultar el saldo real y conciliarlo mediante la operación protegida; probar diferencias positivas, negativas, cero y cuenta ajena, y confirmar que la interfaz conserva las acciones actuales de cuenta.
+- [x] 3.2 Excluir ajustes de los cálculos de gasto/ingreso, presupuestos, divisiones y exportaciones ordinarias, etiquetarlos en el historial y actualizar `docs/architecture.md`; verificar saldo, informes y listado con un ajuste de cada signo.
 
 ## 4. Importación CSV revisable
 

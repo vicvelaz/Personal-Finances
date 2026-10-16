@@ -44,6 +44,23 @@ export function parseMoneyInput(input: string): Minor | null {
   return minor === 0 ? 0 : sign * minor;
 }
 
+/** Whether an amount input is a valid editable draft (including an empty field). */
+export function isValidPositiveMoneyDraft(input: string): boolean {
+  if (input === "") return true;
+  return /^\d*(?:[.,]\d{0,2})?$/.test(input) && /\d/.test(input);
+}
+
+/** Parses an ungrouped positive amount with at most one decimal separator into minor units. */
+export function parsePositiveMoneyInput(input: string): Minor | null {
+  const match = /^(\d*)(?:[.,](\d{1,2}))?$/.exec(input);
+  if (!match || (!match[1] && !match[2])) return null;
+
+  const major = BigInt(match[1] || "0");
+  const minor = major * BigInt(100) + BigInt((match[2] ?? "").padEnd(2, "0") || "0");
+  if (minor <= BigInt(0) || minor > BigInt(Number.MAX_SAFE_INTEGER)) return null;
+  return Number(minor);
+}
+
 /** Formats minor units for an editable input, using the locale's decimal mark and no grouping. */
 export function minorToInput(minor: Minor, locale = "es-ES"): string {
   const decimalMark = new Intl.NumberFormat(locale).format(1.5).includes(",") ? "," : ".";

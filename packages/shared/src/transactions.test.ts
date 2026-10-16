@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { fieldErrors } from "./auth";
-import { escapeLike, signedAmount, TRANSACTION_MESSAGES, transactionErrorMessage, transactionSchema } from "./transactions";
+import {
+  escapeLike,
+  signedAmount,
+  TRANSACTION_FILTER_KINDS,
+  TRANSACTION_KINDS,
+  TRANSACTION_MESSAGES,
+  transactionErrorMessage,
+  transactionSchema,
+} from "./transactions";
 
 const A = "1e6a96f3-bb4b-4853-8f94-66d6b45cb991";
 const B = "7bbd45d3-404e-4054-abb9-d6a2eeab4add";
@@ -44,6 +52,12 @@ describe("transactionSchema", () => {
     expect(missing.success).toBe(false);
   });
 
+  it("keeps internal adjustments out of ordinary transaction forms", () => {
+    expect(TRANSACTION_KINDS).not.toContain("adjustment");
+    expect(TRANSACTION_FILTER_KINDS).toContain("adjustment");
+    expect(transactionSchema.safeParse({ ...base, kind: "adjustment" }).success).toBe(false);
+  });
+
   it.each([
     ["zero amount", { amount: "0" }, "amount"],
     ["negative amount", { amount: "-5" }, "amount"],
@@ -68,6 +82,10 @@ describe("helpers", () => {
       field: "toAccountId",
       message: TRANSACTION_MESSAGES.currencyMismatch,
     });
+    expect(transactionErrorMessage("split_adjustment").message).toBe(TRANSACTION_MESSAGES.splitAdjustment);
+    expect(transactionErrorMessage("adjustment_reconciliation_only").message).toBe(
+      TRANSACTION_MESSAGES.adjustmentReadOnly,
+    );
     expect(transactionErrorMessage("whatever").message).toBe(TRANSACTION_MESSAGES.unexpected);
   });
 

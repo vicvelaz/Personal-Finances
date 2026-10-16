@@ -3,8 +3,8 @@ import {
   formatMoney,
   formatMonth,
   shiftMonth,
+  TRANSACTION_FILTER_KINDS,
   TRANSACTION_KIND_LABELS,
-  TRANSACTION_KINDS,
   todayInTimeZone,
   translate,
   type TransactionKind,
@@ -22,7 +22,7 @@ import { useProfile } from '@/lib/profile';
 import { useTransactions } from '@/lib/transactions';
 
 const ALL = '';
-const KIND_OPTIONS = [ALL, ...TRANSACTION_KINDS] as const;
+const KIND_OPTIONS = [ALL, ...TRANSACTION_FILTER_KINDS] as const;
 const KIND_LABELS = { [ALL]: 'Todos', ...TRANSACTION_KIND_LABELS };
 
 export default function TransactionsScreen() {
@@ -54,7 +54,9 @@ export default function TransactionsScreen() {
                 <ThemedText translateText={!t.description}>{t.description ?? TRANSACTION_KIND_LABELS[t.kind]}</ThemedText>
                 <ThemedText type="small" themeColor="textSecondary">
                   {formatIsoDate(t.occurred_on, locale)} · <ThemedText type="small" themeColor="textSecondary" translateText={false}>{t.account?.name}</ThemedText> ·{' '}
-                  {t.kind === 'transfer'
+                  {t.kind === 'adjustment'
+                    ? translate(locale, 'transactions.balanceAdjustment')
+                    : t.kind === 'transfer'
                     ? translate(locale, "transactions.transfer")
                     : t.splits?.length
                       ? translate(locale, "transactions.splitCount", { count: t.splits.length })

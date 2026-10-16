@@ -1,5 +1,6 @@
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const ISO_MONTH = /^(\d{4})-(\d{2})$/;
+const MANUAL_DATE = /^(\d{2})\/(\d{2})\/(\d{4})$/;
 
 /** Today's date (YYYY-MM-DD) in the given IANA time zone. */
 export function todayInTimeZone(timeZone: string, now: Date = new Date()): string {
@@ -13,6 +14,21 @@ export function isValidIsoDate(value: string): boolean {
   const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
   const date = new Date(Date.UTC(y, mo - 1, d));
   return date.getUTCFullYear() === y && date.getUTCMonth() === mo - 1 && date.getUTCDate() === d;
+}
+
+/** Converts a valid manual DD/MM/YYYY date to an ISO calendar date without timezone conversion. */
+export function parseManualDate(value: string): string | null {
+  const match = MANUAL_DATE.exec(value);
+  if (!match) return null;
+  const iso = `${match[3]}-${match[2]}-${match[1]}`;
+  return isValidIsoDate(iso) ? iso : null;
+}
+
+/** Converts a valid ISO calendar date to DD/MM/YYYY, or null for invalid input. */
+export function formatManualDate(value: string): string | null {
+  if (!isValidIsoDate(value)) return null;
+  const [year, month, day] = value.split("-");
+  return `${day}/${month}/${year}`;
 }
 
 /** First and last day (inclusive, YYYY-MM-DD) of a YYYY-MM month, or null if invalid. */

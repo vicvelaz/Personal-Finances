@@ -1,6 +1,14 @@
 "use server";
 
-import { ACCOUNT_MESSAGES, accountCreateSchema, accountUpdateSchema, fieldErrors } from "@fin/shared";
+import {
+  ACCOUNT_MESSAGES,
+  accountCreateSchema,
+  accountReconciliationErrorKey,
+  accountUpdateSchema,
+  fieldErrors,
+  parseMoneyInput,
+  type TranslationKey,
+} from "@fin/shared";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -8,6 +16,13 @@ import { createClient } from "@/lib/supabase/server";
 export type AccountFormState = {
   errors?: Record<string, string>;
   error?: string;
+};
+
+export type AccountReconciliationState = {
+  errors?: Record<string, TranslationKey>;
+  error?: TranslationKey;
+  reconciled?: boolean;
+  delta?: number;
 };
 
 function formValues(formData: FormData) {
@@ -69,6 +84,30 @@ export async function updateAccount(
 
   revalidatePath("/accounts");
   redirect("/accounts");
+}
+
+export async function reconcileAccount(
+  id: string,
+  _: AccountReconciliationState,
+  formData: FormData,
+): Promise<AccountReconciliationState> {
+  const rawBalance = formData.get("realBalance");
+  const realBalance = parseMoneyInput(typeof rawBalance === "string" ? rawBalance : "");
+  if (realBalance === null) {
+    return { errors: { realBalance: "accounts.invalidRealBalance" } };
+  }
+
+  const { supabase } = await requireUser();
+  const { data, error } = await supabase.rpc("reconcile_account", {
+    p_account_id: id,
+    p_real_balance: realBalance,
+  });
+  if (error) return { error: accountReconciliationErrorKey(error.message) };
+
+  revalidatePath(`/accounts/${id}`);
+  revalidatePath("/accounts");
+  revalidatePath("/transactions");
+  return { reconciled: true, delta: data ?? 0 };
 }
 
 export async function setArchived(id: string, archived: boolean) {

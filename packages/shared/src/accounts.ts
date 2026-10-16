@@ -65,6 +65,19 @@ export const ACCOUNT_MESSAGES = {
   unexpected: "No se pudo guardar la cuenta. Inténtalo de nuevo",
 } as const;
 
+export function accountReconciliationErrorKey(message?: string): TranslationKey {
+  switch (message) {
+    case "reconciliation_invalid_account":
+      return "accounts.accountNotFound";
+    case "transaction_account_archived":
+      return "accounts.cannotReconcileArchived";
+    case "mfa_required":
+      return "auth.mfaRequired";
+    default:
+      return "accounts.reconciliationFailed";
+  }
+}
+
 /** Sums balances of non-archived accounts per currency; never mixes currencies. */
 export function totalsByCurrency(
   accounts: readonly { currency: string; balance: Minor; isArchived: boolean }[],

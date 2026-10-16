@@ -30,10 +30,14 @@ END $$;
 
 INSERT INTO public.accounts (user_id, name)
 VALUES ('00000000-0000-0000-0000-00000000000b', 'Cuenta de B');
+INSERT INTO public.savings_goals (user_id, name, target_amount)
+VALUES ('00000000-0000-0000-0000-00000000000b', 'Meta de B', 50000);
 SELECT set_config('test.b_cat',
   (SELECT id::text FROM public.categories WHERE user_id = '00000000-0000-0000-0000-00000000000b' AND name = 'Ocio'), true);
 SELECT set_config('test.b_acc',
   (SELECT id::text FROM public.accounts WHERE user_id = '00000000-0000-0000-0000-00000000000b' LIMIT 1), true);
+SELECT set_config('test.b_goal',
+  (SELECT id::text FROM public.savings_goals WHERE user_id = '00000000-0000-0000-0000-00000000000b' LIMIT 1), true);
 
 -- Act as user A.
 SET LOCAL ROLE authenticated;
@@ -226,6 +230,51 @@ BEGIN
   ASSERT NOT EXISTS (SELECT 1 FROM public.transactions WHERE transfer_group_id = g), 'transfer deleted as a whole';
 END $$;
 
+-- Account reconciliation adjustments are protected and affect only account balance.
+DO $$
+DECLARE
+  uid uuid := '00000000-0000-0000-0000-00000000000a';
+  acc uuid;
+  tx uuid;
+  before_balance bigint;
+  book_balance bigint;
+  actual bigint;
+BEGIN
+  SELECT id INTO acc FROM public.accounts WHERE name = 'Con movimientos';
+  SELECT balance INTO before_balance FROM public.account_balances WHERE id = acc;
+  ASSERT public.reconcile_account(acc, before_balance + 5000, current_date) = 5000, 'positive reconciliation delta';
+  ASSERT (SELECT balance FROM public.account_balances WHERE id = acc) = before_balance + 5000, 'positive adjustment changes account balance';
+  SELECT id INTO tx FROM public.transactions
+  WHERE account_id = acc AND kind = 'adjustment' ORDER BY created_at DESC LIMIT 1;
+  PERFORM pg_temp.expect_error(format(
+    $q$INSERT INTO public.transactions (user_id, account_id, kind, amount, occurred_on) VALUES (%L, %L, 'adjustment', 1, current_date)$q$,
+    uid, acc), 'adjustment_reconciliation_only');
+  PERFORM pg_temp.expect_error(format(
+    $q$UPDATE public.transactions SET description = 'edited' WHERE id = %L$q$, tx),
+    'adjustment_reconciliation_only');
+  PERFORM pg_temp.expect_error(format(
+    $q$DELETE FROM public.transactions WHERE id = %L$q$, tx),
+    'adjustment_reconciliation_only');
+  PERFORM pg_temp.expect_error(
+    format('SELECT public.set_transaction_splits(%L, %L)', tx, '[]'),
+    'split_adjustment');
+
+  SELECT balance INTO book_balance FROM public.account_balances WHERE id = acc;
+  ASSERT public.reconcile_account(acc, book_balance, current_date) = 0, 'zero reconciliation creates no adjustment';
+  ASSERT (SELECT count(*) FROM public.transactions WHERE account_id = acc AND kind = 'adjustment') = 1,
+    'zero reconciliation creates no movement';
+  ASSERT public.reconcile_account(acc, book_balance - 2500, current_date) = -2500, 'negative reconciliation delta';
+  ASSERT (SELECT balance FROM public.account_balances WHERE id = acc) = book_balance - 2500, 'negative adjustment changes account balance';
+  ASSERT (SELECT count(*) FROM public.transactions WHERE account_id = acc AND kind = 'adjustment') = 2,
+    'positive and negative adjustments are stored';
+
+  SELECT balance INTO actual FROM public.account_balances WHERE id = acc;
+  PERFORM pg_temp.expect_error(format(
+    'SELECT public.reconcile_account(%L, 100, current_date)', current_setting('test.b_acc')::uuid),
+    'reconciliation_invalid_account');
+  ASSERT (SELECT balance FROM public.account_balances WHERE id = acc) = actual, 'failed foreign-account reconciliation changes nothing';
+END $$;
+
 -- Budgets, still as user A.
 DO $$
 DECLARE
@@ -234,6 +283,7 @@ DECLARE
   usd uuid;
   food uuid;
   bid uuid;
+  book_balance bigint;
 BEGIN
   SELECT id INTO main_acc FROM public.accounts WHERE name = 'Con movimientos';
   SELECT id INTO usd FROM public.accounts WHERE name = 'USD A';
@@ -248,8 +298,15 @@ BEGIN
     (uid, main_acc, 'expense', -6000, '2026-09-11', (SELECT id FROM public.categories WHERE name = 'Restaurantes')),
     (uid, usd, 'expense', -5000, '2026-09-12', (SELECT id FROM public.categories WHERE name = 'Supermercado')),
     (uid, main_acc, 'expense', -999, '2026-08-31', (SELECT id FROM public.categories WHERE name = 'Supermercado'));
+  SELECT a.opening_balance + coalesce(sum(t.amount), 0)::bigint INTO book_balance
+  FROM public.accounts a
+  LEFT JOIN public.transactions t ON t.account_id = a.id AND t.user_id = uid AND t.occurred_on <= '2026-09-12'
+  WHERE a.id = main_acc
+  GROUP BY a.opening_balance;
+  PERFORM public.reconcile_account(main_acc, book_balance + 5000, '2026-09-12');
+  PERFORM public.reconcile_account(main_acc, book_balance + 2500, '2026-09-12');
   ASSERT (SELECT spent FROM public.budget_progress('2026-09-20') WHERE budget_id = bid) = 18000,
-    'spent includes children, excludes other currencies and months';
+    'spent excludes adjustment signs, other currencies and months';
 
   PERFORM pg_temp.expect_error(format(
     $q$INSERT INTO public.budgets (user_id, category_id, period_start, amount) VALUES (%L, (SELECT id FROM public.categories WHERE name = 'Nómina'), '2026-09-01', 100)$q$,
@@ -260,17 +317,122 @@ BEGIN
   PERFORM pg_temp.expect_error(format(
     $q$INSERT INTO public.budgets (user_id, category_id, period_start, amount) VALUES (%L, %L, '2026-10-01', 100)$q$,
     uid, current_setting('test.b_cat')), 'budget_invalid_category');
-  BEGIN
-    INSERT INTO public.budgets (user_id, category_id, period_start, amount) VALUES (uid, food, '2026-09-02', 1);
-    RAISE EXCEPTION 'duplicate budget must fail';
-  EXCEPTION WHEN unique_violation THEN NULL;
-  END;
+  PERFORM pg_temp.expect_error(format(
+    $q$INSERT INTO public.budgets (user_id, category_id, period_start, amount) VALUES (%L, %L, '2026-09-02', 1)$q$,
+    uid, food), 'budget_period_overlap');
 
   INSERT INTO public.budgets (user_id, category_id, period_start, amount) VALUES
     (uid, food, '2026-08-01', 1000),
     (uid, (SELECT id FROM public.categories WHERE name = 'Restaurantes'), '2026-08-01', 5000);
   ASSERT public.copy_budgets('2026-08-01', '2026-09-01') = 1, 'copy creates only missing budgets';
   ASSERT (SELECT amount FROM public.budgets WHERE id = bid) = 30000, 'existing budget untouched by copy';
+END $$;
+
+-- Monthly budget settlements are owner-only, atomic and idempotent.
+DO $$
+DECLARE
+  uid uuid := '00000000-0000-0000-0000-00000000000a';
+  period date := (date_trunc('year', current_date) - interval '1 year')::date;
+  source_category uuid;
+  target_category uuid;
+  source_budget uuid;
+  target_budget uuid;
+  goal uuid;
+  overflow_goal uuid;
+  foreign_goal uuid := current_setting('test.b_goal')::uuid;
+  closure uuid;
+  settlement uuid;
+  retry uuid;
+  goal_before bigint;
+  overflow_before bigint;
+  transactions_before bigint;
+BEGIN
+  INSERT INTO public.categories (user_id, kind, name)
+  VALUES (uid, 'expense', 'Cierre origen')
+  RETURNING id INTO source_category;
+  INSERT INTO public.categories (user_id, kind, name)
+  VALUES (uid, 'expense', 'Cierre destino')
+  RETURNING id INTO target_category;
+  INSERT INTO public.budgets (user_id, category_id, period_start, period, amount)
+  VALUES (uid, source_category, period, 'monthly', 30000)
+  RETURNING id INTO source_budget;
+  INSERT INTO public.budgets (user_id, category_id, period_start, period, amount)
+  VALUES (uid, target_category, period, 'monthly', 5000)
+  RETURNING id INTO target_budget;
+  INSERT INTO public.transactions (user_id, account_id, category_id, kind, amount, occurred_on)
+  VALUES
+    (uid, (SELECT id FROM public.accounts WHERE name = 'Con movimientos'), source_category, 'expense', -20000, period + 10),
+    (uid, (SELECT id FROM public.accounts WHERE name = 'Con movimientos'), target_category, 'expense', -6000, period + 11);
+  INSERT INTO public.savings_goals (user_id, name, target_amount, currency)
+  VALUES (uid, 'Meta cierre EUR', 100000, 'EUR')
+  RETURNING id INTO goal;
+  INSERT INTO public.savings_goals (user_id, name, target_amount, currency)
+  VALUES (uid, 'Meta cierre USD', 100000, 'USD');
+  INSERT INTO public.savings_goals (user_id, name, target_amount, current_amount, currency)
+  VALUES (uid, 'Meta límite', 9223372036854775807, 9223372036854775800, 'EUR')
+  RETURNING id INTO overflow_goal;
+
+  ASSERT public.apply_budget_settlement(source_budget, period, 'reallocation', 1000,
+    'closure-reallocation', target_budget, NULL, period) IS NOT NULL, 'reallocation recorded';
+  SELECT id INTO closure FROM public.budget_closures
+  WHERE budget_id = source_budget AND period_start = period;
+  ASSERT (SELECT status FROM public.budget_closures WHERE id = closure) = 'open', 'partial close remains resumable';
+  PERFORM pg_temp.expect_error(format('SELECT public.complete_budget_closure(%L, %L)', source_budget, period),
+    'budget_closure_remainder_pending');
+
+  SELECT current_amount INTO goal_before FROM public.savings_goals WHERE id = goal;
+  SELECT count(*) INTO transactions_before FROM public.transactions;
+  PERFORM pg_temp.expect_error(format(
+    'SELECT public.apply_budget_settlement(%L, %L, %L, 1, %L, NULL, %L, NULL)',
+    source_budget, period, 'goal', 'closure-foreign-goal', foreign_goal), 'budget_invalid_goal');
+  PERFORM pg_temp.expect_error(format(
+    'SELECT public.apply_budget_settlement(%L, %L, %L, 1, %L, NULL, (SELECT id FROM public.savings_goals WHERE name = %L), NULL)',
+    source_budget, period, 'goal', 'closure-wrong-currency', 'Meta cierre USD'), 'budget_invalid_goal');
+  ASSERT (SELECT count(*) FROM public.budget_settlements WHERE user_id = uid
+          AND idempotency_key IN ('closure-foreign-goal', 'closure-wrong-currency')) = 0,
+    'failed goal allocations leave no settlement record';
+  ASSERT (SELECT current_amount FROM public.savings_goals WHERE id = goal) = goal_before,
+    'failed goal allocations leave goal unchanged';
+  ASSERT (SELECT count(*) FROM public.transactions) = transactions_before,
+    'virtual closures do not create bank movements';
+
+  SELECT current_amount INTO overflow_before FROM public.savings_goals WHERE id = overflow_goal;
+  BEGIN
+    PERFORM public.apply_budget_settlement(source_budget, period, 'goal', 100,
+      'closure-overflow', NULL, overflow_goal, NULL);
+    RAISE EXCEPTION 'overflowing goal update must fail';
+  EXCEPTION WHEN numeric_value_out_of_range THEN NULL;
+  END;
+  ASSERT NOT EXISTS (SELECT 1 FROM public.budget_settlements WHERE idempotency_key = 'closure-overflow'),
+    'failed goal update rolls back its settlement';
+  ASSERT (SELECT current_amount FROM public.savings_goals WHERE id = overflow_goal) = overflow_before,
+    'failed goal update leaves goal balance unchanged';
+
+  settlement := public.apply_budget_settlement(source_budget, period, 'goal', 4000,
+    'closure-goal', NULL, goal, NULL);
+  retry := public.apply_budget_settlement(source_budget, period, 'goal', 4000,
+    'closure-goal', NULL, goal, NULL);
+  ASSERT retry = settlement, 'same idempotency key returns the recorded settlement';
+  ASSERT (SELECT current_amount FROM public.savings_goals WHERE id = goal) = goal_before + 4000,
+    'retry does not double the goal contribution';
+  ASSERT public.apply_budget_settlement(source_budget, period, 'rollover', 3000,
+    'closure-rollover', source_budget, NULL, (period + interval '1 month')::date) IS NOT NULL,
+    'rollover recorded for next month';
+  ASSERT public.apply_budget_settlement(source_budget, period, 'expire', 2000,
+    'closure-expire', NULL, NULL, NULL) IS NOT NULL, 'expired remainder recorded';
+  ASSERT (SELECT status FROM public.budget_closures WHERE id = closure) = 'completed',
+    'closure completes when all positive remainder is allocated';
+  ASSERT public.complete_budget_closure(source_budget, period) = closure,
+    'completing an already completed closure is idempotent';
+
+  PERFORM pg_temp.expect_error(format(
+    'UPDATE public.budget_closures SET status = %L WHERE id = %L', 'open', closure),
+    'budget_operation_protected');
+  PERFORM pg_temp.expect_error(format(
+    'DELETE FROM public.budget_settlements WHERE id = %L', settlement),
+    'budget_operation_protected');
+  ASSERT (SELECT current_amount FROM public.savings_goals WHERE id = goal) = goal_before + 4000,
+    'settlement leaves unrelated data unchanged';
 END $$;
 
 -- Scheduled transactions, still as user A.
@@ -368,7 +530,9 @@ DECLARE
 BEGIN
   SELECT id INTO main_acc FROM public.accounts WHERE name = 'Con movimientos';
   SELECT id INTO savings FROM public.accounts WHERE name = 'Ahorro A';
-  DELETE FROM public.transactions WHERE user_id = uid AND occurred_on BETWEEN '2026-06-01' AND '2026-09-30' AND category_id IS NULL;
+  DELETE FROM public.transactions
+  WHERE user_id = uid AND occurred_on BETWEEN '2026-06-01' AND '2026-09-30'
+    AND category_id IS NULL AND kind <> 'adjustment';
   INSERT INTO public.transactions (user_id, account_id, kind, amount, occurred_on, category_id) VALUES
     (uid, main_acc, 'income', 200000, '2026-09-01', (SELECT id FROM public.categories WHERE name = 'Nómina')),
     (uid, main_acc, 'expense', -500, '2026-09-02', NULL),

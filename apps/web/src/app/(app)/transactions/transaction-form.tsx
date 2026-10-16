@@ -1,6 +1,11 @@
 "use client";
 
-import { buildCategoryTree, type CategoryRow, TRANSACTION_KIND_LABELS, type TransactionKind } from "@fin/shared";
+import {
+  buildCategoryTree,
+  type CategoryRow,
+  TRANSACTION_KIND_LABELS,
+  type TransactionInput,
+} from "@fin/shared";
 import Link from "next/link";
 import { useActionState, useState } from "react";
 import { Field, FormAlert, SubmitButton } from "@/components/form";
@@ -12,7 +17,7 @@ const inputClass =
   "rounded-md border border-neutral-300 bg-transparent px-3 py-2 dark:border-neutral-700";
 
 export type TransactionFormValues = {
-  kind: TransactionKind;
+  kind: TransactionInput["kind"];
   accountId: string;
   toAccountId: string;
   categoryId: string;
@@ -35,11 +40,11 @@ export function TransactionForm({
   initial: TransactionFormValues;
   accounts: AccountOption[];
   categories: CategoryRow[];
-  allowedKinds: readonly TransactionKind[];
+  allowedKinds: readonly TransactionInput["kind"][];
   submitLabel: string;
 }) {
   const [state, formAction] = useActionState(action, {});
-  const [kind, setKind] = useState<TransactionKind>(initial.kind);
+  const [kind, setKind] = useState<TransactionInput["kind"]>(initial.kind);
   const [fromId, setFromId] = useState(initial.accountId);
   const [toId, setToId] = useState(initial.toAccountId);
   const currencyOf = (id: string) => accounts.find((a) => a.id === id)?.currency;
@@ -59,7 +64,7 @@ export function TransactionForm({
           id="field-kind"
           name="kind"
           value={kind}
-          onChange={(e) => setKind(e.target.value as TransactionKind)}
+          onChange={(e) => setKind(e.target.value as TransactionInput["kind"])}
           className={inputClass}
         >
           {allowedKinds.map((k) => (

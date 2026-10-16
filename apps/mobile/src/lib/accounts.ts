@@ -1,5 +1,6 @@
 import {
   ACCOUNT_MESSAGES,
+  accountReconciliationErrorKey,
   type AccountCreate,
   type AccountType,
   type AccountUpdate,
@@ -109,5 +110,20 @@ export function useAccountMutations() {
     onSuccess,
   });
 
-  return { create, update, setArchived, remove };
+  const reconcile = useMutation({
+    mutationFn: async ({ id, realBalance }: { id: string; realBalance: number }) => {
+      const { data, error } = await supabase.rpc('reconcile_account', {
+        p_account_id: id,
+        p_real_balance: realBalance,
+      });
+      if (error) throw new AccountError(accountReconciliationErrorKey(error.message));
+      return data ?? 0;
+    },
+    onSuccess: () => {
+      onSuccess();
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    },
+  });
+
+  return { create, update, setArchived, remove, reconcile };
 }

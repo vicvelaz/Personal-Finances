@@ -1,5 +1,6 @@
-import { minorToInput } from "@fin/shared";
+import { formatIsoDate, formatMoney, minorToInput, translate } from "@fin/shared";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getProfilePrefs } from "@/lib/profile";
 import { createClient } from "@/lib/supabase/server";
@@ -8,7 +9,7 @@ import { updateTransaction } from "../actions";
 import { TransactionForm } from "../transaction-form";
 import { DeleteTransaction } from "./delete-transaction";
 import { SplitEditor } from "./split-editor";
-import { translate } from "@fin/shared";
+import { T } from "@/components/i18n-provider";
 import { translateServer } from "@/lib/i18n";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -19,7 +20,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 type Leg = {
   id: string;
-  kind: "expense" | "income" | "transfer";
+  kind: "expense" | "income" | "transfer" | "adjustment";
   amount: number;
   currency: string;
   account_id: string;
@@ -28,6 +29,7 @@ type Leg = {
   description: string | null;
   notes: string | null;
   transfer_group_id: string | null;
+  account: { name: string } | null;
 };
 
 export default async function EditTransactionPage({ params }: PageProps<"/transactions/[id]">) {
@@ -35,11 +37,26 @@ export default async function EditTransactionPage({ params }: PageProps<"/transa
   if (!UUID_RE.test(id)) notFound();
 
   const supabase = await createClient();
-  const columns = "id, kind, amount, currency, account_id, category_id, occurred_on, description, notes, transfer_group_id";
+  const columns =
+    "id, kind, amount, currency, account_id, category_id, occurred_on, description, notes, transfer_group_id, account:accounts(name)";
   const { data: tx } = await supabase.from("transactions").select(columns).eq("id", id).maybeSingle<Leg>();
   // RLS hides other users' transactions, so they are indistinguishable from missing ones.
   if (!tx) notFound();
   const { locale } = await getProfilePrefs();
+  if (tx.kind === "adjustment") {
+    return (
+      <section className="mx-auto flex max-w-md flex-col gap-4">
+        <h1 className="text-2xl font-semibold"><T id="transactions.balanceAdjustment" /></h1>
+        <p className="text-neutral-500">
+          {formatIsoDate(tx.occurred_on, locale)} · {tx.account?.name}
+        </p>
+        <p className={`text-lg font-medium ${tx.amount < 0 ? "text-red-600" : "text-green-700"}`}>
+          {formatMoney(tx.amount, tx.currency, locale)}
+        </p>
+        <Link href="/transactions" className="text-sm underline"><T id="transactions.transactions" /></Link>
+      </section>
+    );
+  }
 
   let accountId = tx.account_id;
   let toAccountId = "";
@@ -89,7 +106,7 @@ export default async function EditTransactionPage({ params }: PageProps<"/transa
         allowedKinds={isTransfer ? ["transfer"] : ["expense", "income"]}
         submitLabel="Guardar cambios"
       />
-      {tx.kind !== "transfer" && (
+      {(tx.kind === "expense" || tx.kind === "income") && (
         <SplitEditor
           id={id}
           kind={tx.kind}

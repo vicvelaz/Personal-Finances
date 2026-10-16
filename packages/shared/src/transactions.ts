@@ -5,9 +5,11 @@ import { parseMoneyInput } from "./money-input";
 import type { TranslationKey } from "./i18n";
 
 export const TRANSACTION_KINDS = ["expense", "income", "transfer"] as const;
-export type TransactionKind = (typeof TRANSACTION_KINDS)[number];
+export const TRANSACTION_FILTER_KINDS = [...TRANSACTION_KINDS, "adjustment"] as const;
+export type TransactionKind = (typeof TRANSACTION_FILTER_KINDS)[number];
 
 export const TRANSACTION_KIND_LABELS: Record<TransactionKind, TranslationKey> = {
+  adjustment: "transactions.balanceAdjustment",
   expense: "transactions.expense",
   income: "transactions.income",
   transfer: "transactions.transfer",
@@ -94,6 +96,8 @@ export const TRANSACTION_MESSAGES = {
   splitSumMismatch: "Las partes deben sumar el total del movimiento",
   splitTooFew: "Divide el movimiento en al menos 2 partes",
   splitTransfer: "Las transferencias no se pueden dividir",
+  splitAdjustment: "Los ajustes de saldo no se pueden dividir",
+  adjustmentReadOnly: "Los ajustes de saldo no se pueden editar ni borrar",
   unexpected: "No se pudo guardar el movimiento. Inténtalo de nuevo",
 } as const;
 
@@ -124,6 +128,10 @@ export function transactionErrorMessage(message: string | undefined): { field?: 
       return { message: TRANSACTION_MESSAGES.splitTooFew };
     case "split_transfer":
       return { message: TRANSACTION_MESSAGES.splitTransfer };
+    case "split_adjustment":
+      return { message: TRANSACTION_MESSAGES.splitAdjustment };
+    case "adjustment_reconciliation_only":
+      return { message: TRANSACTION_MESSAGES.adjustmentReadOnly };
     default:
       return { message: TRANSACTION_MESSAGES.unexpected };
   }

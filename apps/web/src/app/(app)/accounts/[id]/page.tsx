@@ -4,8 +4,9 @@ import { notFound } from "next/navigation";
 import { getProfilePrefs } from "@/lib/profile";
 import { createClient } from "@/lib/supabase/server";
 import { AccountForm } from "../account-form";
-import { updateAccount } from "../actions";
+import { reconcileAccount, updateAccount } from "../actions";
 import { AccountDangerZone } from "./danger-zone";
+import { AccountReconciliationForm } from "./reconciliation-form";
 import { T } from "@/components/i18n-provider";
 import { translateServer } from "@/lib/i18n";
 
@@ -52,6 +53,14 @@ export default async function EditAccountPage({ params }: PageProps<"/accounts/[
         currencyLocked
         submitLabel="Guardar cambios"
       />
+      {!account.is_archived && (
+        <AccountReconciliationForm
+          action={reconcileAccount.bind(null, id)}
+          balance={account.balance}
+          currency={account.currency}
+          locale={locale}
+        />
+      )}
       <AccountDangerZone id={id} isArchived={account.is_archived} />
     </section>
   );

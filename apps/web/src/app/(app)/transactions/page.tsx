@@ -6,8 +6,8 @@ import {
   formatMonth,
   monthRange,
   shiftMonth,
+  TRANSACTION_FILTER_KINDS,
   TRANSACTION_KIND_LABELS,
-  TRANSACTION_KINDS,
   TRANSACTION_PAGE_SIZE,
   translate,
   todayInTimeZone,
@@ -38,7 +38,7 @@ export default async function TransactionsPage({ searchParams }: PageProps<"/tra
 
   const month = monthRange(one(sp.month) ?? "") ? one(sp.month)! : todayInTimeZone(timezone).slice(0, 7);
   const range = monthRange(month)!;
-  const kind = TRANSACTION_KINDS.find((k) => k === one(sp.kind));
+  const kind = TRANSACTION_FILTER_KINDS.find((k) => k === one(sp.kind));
   const account = one(sp.account);
   const category = one(sp.category);
   const q = one(sp.q)?.trim() ?? "";
@@ -98,7 +98,7 @@ export default async function TransactionsPage({ searchParams }: PageProps<"/tra
           <T id="fields.type" />
           <select name="kind" defaultValue={kind ?? ""} className={inputClass}>
             <option value=""><T id="common.allMasculine" /></option>
-            {TRANSACTION_KINDS.map((k) => (
+            {TRANSACTION_FILTER_KINDS.map((k) => (
               <option key={k} value={k}><T>{TRANSACTION_KIND_LABELS[k]}</T></option>
             ))}
           </select>
@@ -156,7 +156,9 @@ export default async function TransactionsPage({ searchParams }: PageProps<"/tra
                 </td>
                 <td>{t.account?.name}</td>
                 <td>
-                  {t.kind === "transfer" ? (
+                  {t.kind === "adjustment" ? (
+                    <span className="text-neutral-500"><T>{TRANSACTION_KIND_LABELS.adjustment}</T></span>
+                  ) : t.kind === "transfer" ? (
                     <span className="text-neutral-500"><T id="transactions.transfer" /></span>
                   ) : t.splits?.length ? (
                     <span className="text-neutral-500"><T id="transactions.split" />{t.splits.length}<T>)</T></span>

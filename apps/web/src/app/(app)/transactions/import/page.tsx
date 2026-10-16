@@ -11,7 +11,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function ImportPage() {
-  const [{ locale }, { accounts }] = await Promise.all([getProfilePrefs(), getTransactionOptions()]);
+  const [{ locale }, { accounts, categories }] = await Promise.all([getProfilePrefs(), getTransactionOptions()]);
   const active = accounts.filter((a) => !a.is_archived);
 
   return (
@@ -19,13 +19,13 @@ export default async function ImportPage() {
       <div>
         <h1 className="text-2xl font-semibold"><T id="csvImport.importTransactions" /></h1>
         <p className="text-sm text-neutral-500">
-          <T id="csvImport.uploadBankCsvFinExportNegativeAmountsImportedExpensesPositiveAmountsIncomeTransactionsAlreadyAccountSkipped" />
+          <T id="csvImport.canonicalCsvImportHelp" />
         </p>
       </div>
       {active.length === 0 ? (
         <p className="text-sm text-neutral-500"><Link href="/accounts/new" className="underline"><T id="accounts.createAccountPrompt" /></Link> <T id="csvImport.importing" /></p>
       ) : (
-        <ImportForm accounts={active} locale={locale} />
+        <ImportForm accounts={active} categories={categories} locale={locale} />
       )}
     </section>
   );
