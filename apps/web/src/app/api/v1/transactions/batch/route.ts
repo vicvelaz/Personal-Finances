@@ -1,4 +1,4 @@
-import { importDuplicateKey, isValidIsoDate, MAX_IMPORT_ROWS } from "@fin/shared";
+import { importDuplicateKey, isValidIsoDate, MAX_IMPORT_ROWS, resolveImportAccounts } from "@fin/shared";
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -10,14 +10,18 @@ const rowSchema = z.object({
   amount: z.number().int().refine((amount) => amount !== 0 && Number.isSafeInteger(amount)),
   type: z.enum(["EXPENSE", "INCOME", "TRANSFER"]),
   description: z.string().max(120).nullable(),
-  accountId: z.uuid(),
-  destinationAccountId: z.uuid().nullable(),
+  account: z.string().max(120).nullable(),
+  destinationAccount: z.string().max(120).nullable(),
   categoryId: z.uuid().nullable(),
 });
 
-const requestSchema = z.object({ rows: z.array(rowSchema).min(1).max(MAX_IMPORT_ROWS) });
+const requestSchema = z.object({
+  defaultAccountId: z.uuid(),
+  rows: z.array(rowSchema).min(1).max(MAX_IMPORT_ROWS),
+});
 
-type AccountRow = { id: string; currency: string; is_archived: boolean };
+type AccountRow = { id: string; name: string; currency: string; is_archived: boolean };
+type ResolvedRow = z.infer<typeof rowSchema> & { accountId: string; destinationAccountId: string | null };
 type CategoryRow = { id: string; kind: string };
 type ExistingTransaction = {
   id: string;
@@ -63,29 +67,35 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser();
   if (!user) return errorResponse("unauthorized", 401);
 
-  const rows = parsed.data.rows;
-  for (const row of rows) {
+  for (const row of parsed.data.rows) {
     if ((row.type === "EXPENSE" && row.amount >= 0) || (row.type === "INCOME" && row.amount <= 0)) {
       return errorResponse("invalid_amount_sign", 400);
     }
-    if (row.type === "TRANSFER" && (row.amount <= 0 || !row.destinationAccountId || row.categoryId)) {
-      return errorResponse("invalid_transfer", 400);
+    if (row.type === "TRANSFER" && (row.amount <= 0 || row.categoryId)) return errorResponse("invalid_transfer", 400);
+    if (row.type !== "TRANSFER" && row.destinationAccount) return errorResponse("unexpected_destination", 400);
+  }
+
+  const { data: accounts, error: accountError } = await supabase
+    .from("accounts")
+    .select("id, name, currency, is_archived")
+    .returns<AccountRow[]>();
+  if (accountError) return errorResponse("account_lookup_failed", 500);
+
+  const failures: { line: number; error: string }[] = [];
+  const rows: ResolvedRow[] = [];
+  for (const row of parsed.data.rows) {
+    const resolution = resolveImportAccounts(row, accounts ?? [], parsed.data.defaultAccountId);
+    if (!resolution.ok) {
+      failures.push({ line: row.line, error: resolution.error });
+      continue;
     }
-    if (row.type !== "TRANSFER" && row.destinationAccountId) return errorResponse("unexpected_destination", 400);
+    rows.push({ ...row, accountId: resolution.source.id, destinationAccountId: resolution.destination?.id ?? null });
+  }
+  if (!rows.length) {
+    return NextResponse.json({ imported: 0, skipped: 0, failed: failures.length, errors: failures }, { status: 422 });
   }
 
   const accountIds = [...new Set(rows.flatMap((row) => [row.accountId, row.destinationAccountId].filter((id): id is string => Boolean(id))))];
-  const { data: accounts, error: accountError } = await supabase
-    .from("accounts")
-    .select("id, currency, is_archived")
-    .in("id", accountIds)
-    .returns<AccountRow[]>();
-  if (accountError) return errorResponse("account_lookup_failed", 500);
-  const accountsById = new Map((accounts ?? []).map((account) => [account.id, account]));
-  if (accountsById.size !== accountIds.length || [...accountsById.values()].some((account) => account.is_archived)) {
-    return errorResponse("invalid_or_archived_account", 400);
-  }
-
   const categoryIds = [...new Set(rows.flatMap((row) => (row.categoryId ? [row.categoryId] : [])))];
   let categoriesById = new Map<string, CategoryRow>();
   if (categoryIds.length) {
@@ -100,12 +110,7 @@ export async function POST(request: Request) {
   }
 
   for (const row of rows) {
-    const source = accountsById.get(row.accountId)!;
-    if (row.type === "TRANSFER") {
-      const destination = accountsById.get(row.destinationAccountId!)!;
-      if (source.id === destination.id) return errorResponse("transfer_same_account", 400);
-      if (source.currency !== destination.currency) return errorResponse("transfer_currency_mismatch", 400);
-    } else if (row.categoryId) {
+    if (row.type !== "TRANSFER" && row.categoryId) {
       const category = categoriesById.get(row.categoryId);
       const expectedKind = row.type.toLowerCase();
       if (!category || category.kind !== expectedKind) return errorResponse("invalid_category", 400);
@@ -156,7 +161,7 @@ export async function POST(request: Request) {
     }
   }
 
-  const accepted: typeof rows = [];
+  const accepted: ResolvedRow[] = [];
   let skipped = 0;
   for (const row of rows) {
     const key =
@@ -175,7 +180,6 @@ export async function POST(request: Request) {
     }
   }
 
-  const failures: { line: number; error: string }[] = [];
   const ordinaryRows = accepted.filter((row) => row.type !== "TRANSFER");
   let imported = 0;
   if (ordinaryRows.length) {

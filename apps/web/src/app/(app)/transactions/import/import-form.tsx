@@ -384,7 +384,7 @@ export function ImportForm({
                         {resolution?.ok && <p className="text-xs text-neutral-500">→ {resolution.source.name}</p>}
                       </td>
                       <td>
-                        {row.value?.type === "TRANSFER" && (
+                        {row.value?.type === "TRANSFER" ? (
                           <>
                             <p>{row.value.destinationAccount ?? "—"}</p>
                             {resolution?.ok && resolution.destination && (

@@ -18,14 +18,14 @@
 
 ## 4. Importación CSV revisable
 
-- [ ] 4.1 Actualizar el staging web con cabecera estricta, cuenta predeterminada, mapeo de cuentas/categorías, paginación de 10/25/50, edición de categoría, selección/borrado y plantilla descargable; validar manualmente límites, errores por fila y recuento de filas válidas.
-- [ ] 4.2 Implementar `POST /api/v1/transactions/batch` con sesión autenticada y RLS; probar gastos/ingresos normalizados, cuentas desconocidas o ambiguas, destinos no válidos, rechazo de transferencias entre monedas, duplicados y atomicidad de las dos patas.
-- [ ] 4.3 Alinear la exportación CSV con la cabecera canónica, exportar transferencias una sola vez y omitir ajustes; probar el ciclo exportar-importar y actualizar `docs/architecture.md` sobre el contrato CSV y sus exclusiones.
+- [x] 4.1 Actualizar el staging web con cabecera estricta, cuenta predeterminada, mapeo de cuentas/categorías, paginación de 10/25/50, edición de categoría, selección/borrado y plantilla descargable; validar manualmente límites, errores por fila y recuento de filas válidas.
+- [x] 4.2 Implementar `POST /api/v1/transactions/batch` con sesión autenticada y RLS; probar gastos/ingresos normalizados, cuentas desconocidas o ambiguas, destinos no válidos, rechazo de transferencias entre monedas, duplicados y atomicidad de las dos patas.
+- [x] 4.3 Alinear la exportación CSV con la cabecera canónica, exportar transferencias una sola vez y omitir ajustes; probar el ciclo exportar-importar y actualizar `docs/architecture.md` sobre el contrato CSV y sus exclusiones.
 
 ## 5. Presupuestos y análisis
 
-- [ ] 5.1 Actualizar alta, edición y progreso de presupuestos en web y móvil para periodo único, mensual o anual, fechas de vigencia y exclusión de modalidades solapadas; probar unicidad, conversión de moneda y preservación del comportamiento de periodo único.
-- [ ] 5.2 Añadir equivalencias y proyecciones anual/mensual, distribución de límites para un mes futuro dentro del total anual, gasto real acumulado y reducción media necesaria para el resto del año; probar prorrata, redondeo en unidades menores y rechazo de planes que excedan el límite.
+- [x] 5.1 Actualizar alta, edición y progreso de presupuestos en web y móvil para periodo único, mensual o anual, fechas de vigencia y exclusión de modalidades solapadas; probar unicidad, conversión de moneda y preservación del comportamiento de periodo único.
+- [x] 5.2 Añadir equivalencias y proyecciones anual/mensual, distribución de límites para un mes futuro dentro del total anual, gasto real acumulado y reducción media necesaria para el resto del año; probar prorrata, redondeo en unidades menores y rechazo de planes que excedan el límite.
 - [ ] 5.3 Ampliar el detalle de categoría con estado del presupuesto, gráfico de doce meses y distribución de sobrantes sin quitar edición/borrado; actualizar `docs/architecture.md` y verificar datos vacíos, presupuestos superados y equivalencia de cifras entre web y móvil.
 
 ## 6. Cierre mensual y metas

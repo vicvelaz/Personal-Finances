@@ -1,4 +1,4 @@
-import { fromMinor, toCsv } from "@fin/shared";
+import { buildTransactionsCsv, type ExportTransactionRow } from "@fin/shared";
 import { type NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
@@ -12,16 +12,6 @@ const TABLES = [
   "savings_goals",
 ] as const;
 
-type TxRow = {
-  occurred_on: string;
-  kind: string;
-  description: string | null;
-  amount: number;
-  currency: string;
-  account: { name: string } | null;
-  category: { name: string } | null;
-};
-
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const {
@@ -33,16 +23,13 @@ export async function GET(request: NextRequest) {
   if (request.nextUrl.searchParams.get("format") === "csv") {
     const { data, error } = await supabase
       .from("transactions")
-      .select("occurred_on, kind, description, amount, currency, account:accounts(name), category:categories(name)")
+      .select("occurred_on, kind, description, amount, transfer_group_id, account:accounts(name), category:categories(name)")
       .neq("kind", "adjustment")
       .order("occurred_on")
-      .returns<TxRow[]>();
+      .order("created_at")
+      .returns<ExportTransactionRow[]>();
     if (error) return NextResponse.json({ error: "export_failed" }, { status: 500 });
-    const csv = toCsv(
-      ["fecha", "tipo", "cuenta", "categoria", "descripcion", "importe", "moneda"],
-      data.map((t) => [t.occurred_on, t.kind, t.account?.name, t.category?.name, t.description, fromMinor(t.amount), t.currency]),
-    );
-    return new NextResponse(csv, {
+    return new NextResponse(buildTransactionsCsv(data), {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
         "Content-Disposition": `attachment; filename="fin-movimientos-${date}.csv"`,

@@ -1,7 +1,9 @@
 import { z } from "zod";
-import type { Minor } from "./money";
-import { parseMoneyInput } from "./money-input";
 import { isValidIsoDate, monthRange } from "./dates";
+import { translateKey } from "./i18n";
+import type { Minor } from "./money";
+import { formatMoney } from "./money";
+import { parseMoneyInput } from "./money-input";
 
 export const budgetSchema = z.object({
   categoryId: z.uuid({ error: "Selecciona una categoría" }),
@@ -23,6 +25,28 @@ export type BudgetValues = z.output<typeof budgetSchema>;
 
 export const BUDGET_PERIODS = ["once", "monthly", "annual"] as const;
 export type BudgetPeriod = (typeof BUDGET_PERIODS)[number];
+
+/** Creation input: schedule plus optional inclusive end month (recurring periods only). */
+export const budgetCreateSchema = budgetSchema
+  .extend({
+    period: z.enum(BUDGET_PERIODS, { error: "Modalidad no válida" }).default("once"),
+    endMonth: z
+      .string()
+      .trim()
+      .default("")
+      .transform((v) => (v === "" ? null : v))
+      .pipe(z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, { error: "Mes no válido" }).nullable()),
+  })
+  .superRefine((v, ctx) => {
+    if (v.endMonth === null) return;
+    if (v.period === "once") {
+      ctx.addIssue({ code: "custom", path: ["endMonth"], message: "Un periodo único no tiene fecha final" });
+    } else if (v.endMonth < v.month) {
+      ctx.addIssue({ code: "custom", path: ["endMonth"], message: "La fecha final no puede ser anterior a la inicial" });
+    }
+  });
+
+export type BudgetCreateValues = z.output<typeof budgetCreateSchema>;
 
 export type BudgetPeriodDefinition = {
   period: BudgetPeriod;
@@ -145,7 +169,94 @@ export function planAnnualMonthlyBudget(input: {
   return { success: true, monthlyLimits, annualLimit, plannedTotal };
 }
 
+export type BudgetInsights = {
+  annualLimit: Minor;
+  monthlyEquivalent: Minor;
+  annualEstimate: Minor | null;
+  yearSpent: Minor;
+  expectedToDate: Minor | null;
+  aboveExpected: Minor;
+  maxMonthlyRemaining: Minor;
+};
+
+/**
+ * Annual/monthly equivalences and the pace needed to finish the year within the annual limit.
+ * Returns null for one-off budgets or invalid input. Remaining months include the current one,
+ * whose spending is already part of `yearSpent`.
+ */
+export function budgetInsights(input: {
+  period: BudgetPeriod;
+  baseAmount: Minor;
+  yearSpent: Minor;
+  today: string;
+}): BudgetInsights | null {
+  const { period, baseAmount, yearSpent, today } = input;
+  if (period === "once" || !isValidIsoDate(today) || !Number.isSafeInteger(yearSpent)) return null;
+  const monthlyEquivalent = period === "annual" ? annualBudgetMonthlyEquivalent(baseAmount) : baseAmount;
+  if (monthlyEquivalent === null || !Number.isSafeInteger(baseAmount) || baseAmount <= 0) return null;
+
+  const annualLimit = period === "annual" ? baseAmount : baseAmount * 12;
+  const expectedToDate = period === "monthly" ? monthlyBudgetExpectedToDate(baseAmount, today) : null;
+  const remainingMonths = 12 - Number(today.slice(5, 7)) + 1;
+  return {
+    annualLimit,
+    monthlyEquivalent,
+    annualEstimate: period === "monthly" ? annualLimit : null,
+    yearSpent,
+    expectedToDate,
+    aboveExpected: expectedToDate === null ? 0 : Math.max(0, yearSpent - expectedToDate),
+    maxMonthlyRemaining: Math.max(0, Math.floor((annualLimit - yearSpent) / remainingMonths)),
+  };
+}
+
 export type BudgetLevel = "ok" | "warning" | "over";
+
+/** Localized summary lines for equivalences and projections, shared by web and mobile. */
+export function budgetInsightLines(
+  locale: string,
+  period: BudgetPeriod,
+  insights: BudgetInsights,
+  currency: string,
+): string[] {
+  const money = (v: Minor) => formatMoney(v, currency, locale);
+  const lines: string[] = [];
+  if (period === "annual") {
+    lines.push(translateKey(locale, "budgets.annualLimit", { amount: money(insights.annualLimit) }));
+    lines.push(translateKey(locale, "budgets.monthlyEquivalent", { amount: money(insights.monthlyEquivalent) }));
+  } else {
+    lines.push(translateKey(locale, "budgets.annualEstimate", { amount: money(insights.annualEstimate ?? insights.annualLimit) }));
+    lines.push(translateKey(locale, "budgets.spentYearToDate", { amount: money(insights.yearSpent) }));
+    lines.push(translateKey(locale, "budgets.expectedToDate", { amount: money(insights.expectedToDate ?? 0) }));
+    if (insights.aboveExpected > 0) {
+      lines.push(translateKey(locale, "budgets.overAnnualPace", { amount: money(insights.aboveExpected) }));
+    }
+  }
+  lines.push(translateKey(locale, "budgets.maxMonthlyRemaining", { amount: money(insights.maxMonthlyRemaining) }));
+  return lines;
+}
+
+export type BudgetMonthPlanResult =
+  | { ok: true; rows: { month: string; amount: Minor }[] }
+  | { ok: false; reason: "invalid_month" }
+  | { ok: false; reason: "invalid_amount" }
+  | { ok: false; reason: "exceeds_limit"; uncovered: Minor };
+
+/** Month limits to persist when raising a future month: only months after today up to the target. */
+export function prepareBudgetMonthPlan(input: {
+  monthlyLimit: Minor;
+  currentMonth: string;
+  targetMonth: string;
+  targetLimit: Minor;
+}): BudgetMonthPlanResult {
+  const plan = planAnnualMonthlyBudget(input);
+  if (!plan) return { ok: false, reason: "invalid_month" };
+  if (!plan.success) return { ok: false, reason: "exceeds_limit", uncovered: plan.uncovered };
+  const rows = Object.entries(plan.monthlyLimits)
+    .filter(([month]) => month > input.currentMonth && month <= input.targetMonth)
+    .map(([month, amount]) => ({ month, amount }));
+  if (rows.some((row) => row.amount <= 0)) return { ok: false, reason: "invalid_amount" };
+  return { ok: true, rows };
+}
 
 /** Remaining amount, consumed percentage (rounded) and alert level of a budget. */
 export function budgetStatus(amount: Minor, spent: Minor): { remaining: Minor; percent: number; level: BudgetLevel } {
@@ -156,6 +267,8 @@ export function budgetStatus(amount: Minor, spent: Minor): { remaining: Minor; p
 
 export const BUDGET_MESSAGES = {
   duplicate: "Ya hay un presupuesto para esa categoría en este mes",
+  overlap: "Ya hay un presupuesto para esa categoría que se solapa con este periodo",
+  invalidDates: "Las fechas de vigencia no son válidas",
   invalidCategory: "Elige una categoría de gastos",
   invalidAmount: "Introduce un importe mayor que 0",
   unexpected: "No se pudo guardar el presupuesto. Inténtalo de nuevo",
@@ -165,8 +278,10 @@ export const BUDGET_MESSAGES = {
 export function budgetErrorMessage(
   code: string | undefined,
   message: string | undefined,
-): { field?: "categoryId" | "amount"; message: string } {
+): { field?: "categoryId" | "amount" | "endMonth"; message: string } {
   if (code === "23505") return { field: "categoryId", message: BUDGET_MESSAGES.duplicate };
+  if (message === "budget_period_overlap") return { field: "categoryId", message: BUDGET_MESSAGES.overlap };
+  if (message === "budget_invalid_dates") return { field: "endMonth", message: BUDGET_MESSAGES.invalidDates };
   if (message === "budget_invalid_category") return { field: "categoryId", message: BUDGET_MESSAGES.invalidCategory };
   if (message === "budget_invalid_amount") return { field: "amount", message: BUDGET_MESSAGES.invalidAmount };
   return { message: BUDGET_MESSAGES.unexpected };

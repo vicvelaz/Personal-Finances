@@ -328,6 +328,29 @@ BEGIN
   ASSERT (SELECT amount FROM public.budgets WHERE id = bid) = 30000, 'existing budget untouched by copy';
 END $$;
 
+-- Annual and recurring budgets: natural-year progress, overlap rejection and copy_budgets skipping covered months.
+DO $$
+DECLARE
+  uid uuid := '00000000-0000-0000-0000-00000000000a';
+  health uuid;
+  annual uuid;
+BEGIN
+  SELECT id INTO health FROM public.categories WHERE name = 'Salud';
+  INSERT INTO public.budgets (user_id, category_id, period_start, period, amount)
+  VALUES (uid, health, '2026-05-20', 'annual', 120000) RETURNING id INTO annual;
+  ASSERT (SELECT period_start FROM public.budgets WHERE id = annual) = '2026-01-01', 'annual period starts on January 1';
+  ASSERT (SELECT amount FROM public.budget_progress('2026-09-01') WHERE budget_id = annual) = 120000, 'annual limit stays authoritative';
+  ASSERT NOT EXISTS (SELECT 1 FROM public.budget_progress('2025-12-01') WHERE budget_id = annual), 'annual budget not active before its start';
+  PERFORM pg_temp.expect_error(format(
+    $q$INSERT INTO public.budgets (user_id, category_id, period_start, amount) VALUES (%L, %L, '2026-10-01', 100)$q$,
+    uid, health), 'budget_period_overlap');
+  PERFORM pg_temp.expect_error(format(
+    $q$INSERT INTO public.budgets (user_id, category_id, period_start, period, period_end, amount) VALUES (%L, %L, '2027-02-01', 'once', '2027-03-01', 100)$q$,
+    uid, health), 'budget_invalid_dates');
+  ASSERT public.copy_budgets('2026-08-01', '2026-09-01') = 0, 'copy skips categories already covered';
+  DELETE FROM public.budgets WHERE id = annual;
+END $$;
+
 -- Monthly budget settlements are owner-only, atomic and idempotent.
 DO $$
 DECLARE

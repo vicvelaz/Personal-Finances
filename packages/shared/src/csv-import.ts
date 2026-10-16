@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { toCsv } from "./data-rights";
 import { isValidIsoDate } from "./dates";
 import { parseMoneyInput } from "./money-input";
 
@@ -238,6 +239,73 @@ export function buildCanonicalImportRows(rows: string[][]):
   });
 
   return { success: true, rows: parsedRows };
+}
+
+export const TRANSACTIONS_CSV_HEADER = [
+  "date",
+  "amount",
+  "type",
+  "category",
+  "account",
+  "description",
+  "destination_account",
+] as const;
+
+export type ExportTransactionRow = {
+  occurred_on: string;
+  kind: string;
+  description: string | null;
+  amount: number;
+  transfer_group_id: string | null;
+  account: { name: string } | null;
+  category: { name: string } | null;
+};
+
+/** Exact "12.34" text from minor units, without floating-point conversion. */
+function formatCsvAmount(minor: number): string {
+  const abs = Math.abs(minor);
+  return `${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, "0")}`;
+}
+
+/**
+ * Canonical CSV of ordinary movements: positive magnitudes, `type` carrying the direction,
+ * each transfer exported once from its negative leg and internal adjustments omitted.
+ */
+export function buildTransactionsCsv(rows: readonly ExportTransactionRow[]): string {
+  const destinations = new Map<string, string>();
+  for (const row of rows) {
+    if (row.kind === "transfer" && row.transfer_group_id && row.amount > 0 && row.account) {
+      destinations.set(row.transfer_group_id, row.account.name);
+    }
+  }
+
+  const lines: (string | null)[][] = [];
+  for (const row of rows) {
+    if (row.kind === "expense" || row.kind === "income") {
+      lines.push([
+        row.occurred_on,
+        formatCsvAmount(row.amount),
+        row.kind.toUpperCase(),
+        row.category?.name ?? null,
+        row.account?.name ?? null,
+        row.description,
+        null,
+      ]);
+    } else if (row.kind === "transfer" && row.amount < 0 && row.transfer_group_id) {
+      const destination = destinations.get(row.transfer_group_id);
+      if (!destination) continue;
+      lines.push([
+        row.occurred_on,
+        formatCsvAmount(row.amount),
+        "TRANSFER",
+        null,
+        row.account?.name ?? null,
+        row.description,
+        destination,
+      ]);
+    }
+  }
+  return toCsv(TRANSACTIONS_CSV_HEADER, lines);
 }
 
 export const IMPORT_FIELDS = ["date", "amount", "description", "category", "kind", "currency", "account"] as const;

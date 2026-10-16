@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   buildCanonicalImportRows,
   buildImportRows,
+  buildTransactionsCsv,
   guessMapping,
   importDuplicateKey,
   INVALID_CSV_HEADER,
   parseCsv,
   parseImportDate,
   resolveImportAccounts,
+  TRANSACTIONS_CSV_HEADER,
   validateImportHeader,
 } from "./csv-import";
 import { toCsv } from "./data-rights";
@@ -147,6 +149,34 @@ describe("canonical CSV import", () => {
 
     expect(result.success).toBe(true);
     if (result.success) expect(result.rows[0]?.error).toBe("Importe no válido");
+  });
+});
+
+describe("canonical CSV export", () => {
+  const rows = [
+    { occurred_on: "2026-10-01", kind: "expense", description: "=Cena", amount: -4550, transfer_group_id: null, account: { name: "Main" }, category: { name: "Food" } },
+    { occurred_on: "2026-10-02", kind: "income", description: null, amount: 100000, transfer_group_id: null, account: { name: "Main" }, category: null },
+    { occurred_on: "2026-10-03", kind: "transfer", description: "Move", amount: -5000, transfer_group_id: "g1", account: { name: "Main" }, category: null },
+    { occurred_on: "2026-10-03", kind: "transfer", description: "Move", amount: 5000, transfer_group_id: "g1", account: { name: "Savings" }, category: null },
+    { occurred_on: "2026-10-04", kind: "adjustment", description: null, amount: 3000, transfer_group_id: null, account: { name: "Main" }, category: null },
+  ];
+
+  it("uses the canonical header, exports each transfer once and omits adjustments", () => {
+    const parsed = parseCsv(buildTransactionsCsv(rows));
+    expect(parsed[0]).toEqual([...TRANSACTIONS_CSV_HEADER]);
+    expect(parsed).toHaveLength(4);
+    expect(parsed.some((r) => r.includes("3000.00") || r.includes("30.00"))).toBe(false);
+  });
+
+  it("round-trips through the importer reconstructing each movement once", () => {
+    const result = buildCanonicalImportRows(parseCsv(buildTransactionsCsv(rows)));
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.rows.map((r) => r.value)).toEqual([
+      { occurredOn: "2026-10-01", amount: -4550, type: "EXPENSE", category: "Food", account: "Main", destinationAccount: null, description: "=Cena" },
+      { occurredOn: "2026-10-02", amount: 100000, type: "INCOME", category: null, account: "Main", destinationAccount: null, description: null },
+      { occurredOn: "2026-10-03", amount: 5000, type: "TRANSFER", category: null, account: "Main", destinationAccount: "Savings", description: "Move" },
+    ]);
   });
 });
 
